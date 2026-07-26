@@ -106,3 +106,61 @@ input::placeholder {
   opacity: 0.5;
   max-width: 24rem;
 }
+
+.autocomplete {
+  position: relative;
+  width: 100%;
+}
+
+.suggestions {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  background: #fff;
+  color: #000;
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  z-index: 20;
+  max-height: 14rem;
+  overflow-y: auto;
+  text-align: left;
+}
+
+.suggestions li {
+  padding: 10px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+
+.suggestions li:hover,
+.suggestions li:active {
+  background: #f0f0f0;
+}
+
+.map-wrap {
+  width: 100%;
+  max-width: 22rem;
+  margin: 0 0 20px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.map-box {
+  height: 200px;
+  width: 100%;
+  border-radius: 14px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.map-label {
+  margin: 0;
+  font-size: 0.85rem;
+  opacity: 0.85;
+}
