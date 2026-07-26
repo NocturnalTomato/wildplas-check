@@ -4,18 +4,19 @@ import exceptions from "../../../lib/exceptions.json";
 // PDOK Locatieserver — free-text geocoding, no API key required.
 const LOCATIESERVER_URL = "https://api.pdok.nl/bzk/locatieserver/search/v3_1/free";
 
-// PDOK BRT TOP10NL WFS — nationwide topographic registry, updated periodically.
-// The "plaats" (vlakken) layer carries a BEBOUWDEKOM boolean attribute per polygon.
-// NOTE: verify the exact typeName via a DescribeFeatureType call against this
-// service before relying on this in production — PDOK layer names occasionally
-// change between TOP10NL releases. Fallback below degrades gracefully if it 404s.
-const TOP10NL_WFS_URL = "https://service.pdok.nl/brt/top10nl/wfs/v1_0";
-const TOP10NL_TYPENAME = "top10nl:plaats";
+// PDOK BRT TOP10NL — modern OGC API Features (replaces the old WFS service, which
+// no longer resolves reliably). Collection "plaats_vlak" carries a bebouwdekom
+// boolean per polygon. Core OGC API Features only guarantees bbox filtering (no
+// point-intersects filter everywhere), so we query a small bbox around the point
+// and treat "any returned feature flagged bebouwdekom=true" as inside the kom.
+const TOP10NL_ITEMS_URL =
+  "https://api.pdok.nl/kadaster/brt-top10nl/ogc/v1/collections/plaats_vlak/items";
+const BBOX_EPS = 0.0006; // roughly ~65m, small relative to kom-polygon scale
 
 async function geocode(address) {
   const url = `${LOCATIESERVER_URL}?q=${encodeURIComponent(address)}&rows=1&fl=weergavenaam,centroide_ll`;
   const res = await fetch(url);
-  if (!res.ok) throw new Error("geocode_failed");
+  if (!res.ok) throw new Error(`geocode_failed (${res.status})`);
   const data = await res.json();
   const doc = data?.response?.docs?.[0];
   if (!doc?.centroide_ll) throw new Error("no_match");
@@ -29,27 +30,39 @@ async function geocode(address) {
   };
 }
 
-async function lookupBebouwdeKom(lat, lon) {
-  const cql = `INTERSECTS(geometrie,POINT(${lon} ${lat}))`;
-  const url =
-    `${TOP10NL_WFS_URL}?service=WFS&version=2.0.0&request=GetFeature` +
-    `&typeName=${encodeURIComponent(TOP10NL_TYPENAME)}` +
-    `&outputFormat=json&srsName=EPSG:4326&count=1` +
-    `&CQL_FILTER=${encodeURIComponent(cql)}`;
+function firstProp(props, keys) {
+  for (const k of keys) {
+    if (props[k] !== undefined && props[k] !== null) return props[k];
+  }
+  return null;
+}
 
-  const res = await fetch(url);
-  if (!res.ok) throw new Error("wfs_failed");
+async function lookupBebouwdeKom(lat, lon) {
+  const bbox = [lon - BBOX_EPS, lat - BBOX_EPS, lon + BBOX_EPS, lat + BBOX_EPS].join(",");
+  const url = `${TOP10NL_ITEMS_URL}?f=json&bbox=${bbox}&limit=10`;
+
+  const res = await fetch(url, { headers: { Accept: "application/geo+json" } });
+  if (!res.ok) throw new Error(`top10nl_failed (${res.status})`);
   const data = await res.json();
-  const feature = data?.features?.[0];
-  if (!feature) {
-    // No plaats-polygon at this point at all -> outside any bebouwde kom.
+  const features = data?.features || [];
+
+  if (features.length === 0) {
+    // No plaats-polygon anywhere near this point -> outside any bebouwde kom.
     return { insideKom: false, gemeente: null, plaats: null };
   }
+
+  const inKomFeature = features.find((f) => {
+    const props = f.properties || {};
+    return firstProp(props, ["bebouwdekom", "BEBOUWDEKOM", "Bebouwdekom"]) === true;
+  });
+
+  const feature = inKomFeature || features[0];
   const props = feature.properties || {};
+
   return {
-    insideKom: props.BEBOUWDEKOM === true || props.bebouwdekom === true,
-    gemeente: props.GEMEENTENAAM || props.gemeentenaam || null,
-    plaats: props.NAAM || props.naam || null,
+    insideKom: Boolean(inKomFeature),
+    gemeente: firstProp(props, ["gemeentenaam", "GEMEENTENAAM", "gemeente"]),
+    plaats: firstProp(props, ["naamnl", "naam", "NAAM", "naamNL"]),
   };
 }
 
@@ -124,6 +137,7 @@ export async function GET(request) {
       source: "top10nl",
     });
   } catch (err) {
+    console.error("check_failed", err);
     return NextResponse.json({
       allowed: null,
       reason: "Kon de locatie niet controleren (databron tijdelijk niet bereikbaar).",
