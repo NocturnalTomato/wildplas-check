@@ -46,6 +46,18 @@ async function lookupBebouwdeKom(lat, lon) {
   const data = await res.json();
   const features = data?.features || [];
 
+  // TEMP DEBUG: log the raw shape so we can confirm the real property names/values
+  // PDOK returns. Remove once verified.
+  console.log(
+    "DEBUG top10nl",
+    JSON.stringify({
+      bbox,
+      count: features.length,
+      firstProps: features[0]?.properties ?? null,
+      allBebouwdekomValues: features.map((f) => f?.properties?.bebouwdekom),
+    })
+  );
+
   if (features.length === 0) {
     // No plaats-polygon anywhere near this point -> outside any bebouwde kom.
     return { insideKom: false, gemeente: null, plaats: null };
