@@ -99,6 +99,20 @@ async function lookupBebouwdeKom(lat, lon) {
   };
 }
 
+// Rough bounding box around the Netherlands (incl. Wadden islands), used to
+// short-circuit before hitting PDOK — which only covers NL and would otherwise
+// just return "no kern found here" for any location abroad.
+const NL_BBOX = { minLat: 50.7, maxLat: 53.7, minLon: 3.2, maxLon: 7.3 };
+
+function isInNetherlands(lat, lon) {
+  return (
+    lat >= NL_BBOX.minLat &&
+    lat <= NL_BBOX.maxLat &&
+    lon >= NL_BBOX.minLon &&
+    lon <= NL_BBOX.maxLon
+  );
+}
+
 function checkExceptions(gemeente, plaats) {
   if (!gemeente && !plaats) return null;
   const g = (gemeente || "").toLowerCase();
@@ -134,6 +148,15 @@ export async function GET(request) {
         { allowed: null, reason: "Geen geldige locatie meegegeven." },
         { status: 400 }
       );
+    }
+
+    if (!isInNetherlands(lat, lon)) {
+      return NextResponse.json({
+        allowed: null,
+        reason: "Deze locatie ligt buiten Nederland. Deze check werkt alleen voor Nederland, dus we weten het hier niet.",
+        label,
+        source: "out-of-nl",
+      });
     }
 
     const [{ insideKom, plaats }, gemeente] = await Promise.all([
