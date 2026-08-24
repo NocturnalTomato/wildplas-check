@@ -24,6 +24,11 @@ const BBOX_EPS = 0.0006; // roughly ~65m, small relative to kom-polygon scale
 // APV exceptions link to their own municipal regulation instead (see exceptions.json).
 const POLITIE_WILDPLASSEN_URL = "https://www.politie.nl/informatie/wat-is-wildplassen-en-welke-boete-staat-ervoor.html";
 
+// Landelijke zoekpagina voor gemeentelijke regelgeving (CVDR) — geen betrouwbare
+// manier om hier query-parameters op te bouwen die direct naar de juiste APV
+// van een specifieke gemeente linken, dus we linken naar de zoekpagina zelf.
+const LOKALE_REGELGEVING_URL = "https://lokaleregelgeving.overheid.nl/zoeken";
+
 async function geocode(address) {
   const url = `${LOCATIESERVER_URL}?q=${encodeURIComponent(address)}&rows=1&fl=weergavenaam,centroide_ll`;
   const res = await fetch(url);
@@ -193,12 +198,12 @@ export async function GET(request) {
 
     return NextResponse.json({
       allowed: true,
-      reason: `Je bevindt je buiten de bebouwde kom. De meeste APV's regelen het verbod alleen binnen de bebouwde kom, dus hier mag het doorgaans wel.`,
+      reason: `Je bevindt je buiten de bebouwde kom${plaats ? ` van ${plaats}` : ""}. De meeste gemeentelijke APV's verbieden wildplassen alleen binnen de bebouwde kom${gemeente ? ` van ${gemeente}` : ""}. We hebben deze locatie ook gecheckt tegen onze lijst met bekende uitzonderingen (gebieden die een gemeente alsnog buiten de kom verbiedt) en daar is niets gevonden — maar check zelf de APV van de gemeente als je het zeker wilt weten.`,
       gemeente,
       plaats,
       label,
       source: "top10nl",
-      link: { url: POLITIE_WILDPLASSEN_URL, label: "Meer over de regels (politie.nl)" },
+      link: { url: LOKALE_REGELGEVING_URL, label: "Zoek de APV van deze gemeente op" },
     });
   } catch (err) {
     console.error("check_failed", err);

@@ -82,6 +82,20 @@ function extractText(xml) {
 const BEBOUWDE_KOM_RE = /bebouwde kom/i;
 const REVIEW_WINDOW = 400;
 
+// CVDR full text renders article headers as e.g. "Artikel 4:8" (sometimes with a
+// letter suffix like "4:8a") or the older "Artikel 4.8" style. Used to tell a
+// reviewer which article a review-worthy match sits in, since the flat XML->text
+// extraction otherwise loses that structure.
+const ARTICLE_RE = /Artikel\s+\d+[:.]\d+[a-z]?/gi;
+const ARTICLE_LOOKBACK = 2000;
+
+function nearestArticle(text, matchIndex) {
+  const windowStart = Math.max(0, matchIndex - ARTICLE_LOOKBACK);
+  const before = text.slice(windowStart, matchIndex);
+  const found = [...before.matchAll(ARTICLE_RE)];
+  return found.length > 0 ? found[found.length - 1][0] : null;
+}
+
 function findWildplasMentions(text) {
   const hits = [];
   for (const { label, re } of WILDPLAS_PATTERNS) {
@@ -96,6 +110,7 @@ function findWildplasMentions(text) {
 
     hits.push({
       keyword: label,
+      article: nearestArticle(text, match.index),
       snippet: text.slice(snippetStart, snippetEnd).trim(),
       reviewWorthy: !matchesStandardScope,
     });

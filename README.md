@@ -62,8 +62,9 @@ gemeenten natrekt.
    (verboden **binnen de bebouwde kom**) eruit — dat is al de aanname van dit
    hele project, dus geen actie nodig. Alleen bepalingen die daarvan afwijken
    (geen "bebouwde kom" in de buurt van de match — bv. een met naam genoemd
-   gebied zoals het Haagse Bos) worden als `findings` gerapporteerd, mét link
-   naar het CVDR-document.
+   gebied zoals het Haagse Bos) worden als `findings` gerapporteerd, mét het
+   dichtstbijzijnde artikelnummer (bv. "Artikel 4:8") en link naar het
+   CVDR-document.
 4. De job **bewerkt `exceptions.json` niet automatisch** — een gevonden
    afwijkende bepaling vraagt om een menselijke lezing (wat staat er *precies*,
    geldt het echt buiten de bebouwde kom, etc.). Bekijk de Vercel-cronlogs
