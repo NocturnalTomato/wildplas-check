@@ -17,6 +17,12 @@ const STATUS_LABEL = {
 // detailed layers once you're zoomed in on a city/town scale.
 const ZONE_MIN_ZOOM = 13;
 const ZONE_DEBOUNCE_MS = 400;
+const ZONE_PAD_FACTOR = 0.15;
+// Must stay comfortably under /api/zones' MAX_SPAN_DEG (0.35) — that cap is a
+// server-side safety net, this is what actually keeps requests under it. A
+// padded viewport at ZONE_MIN_ZOOM on a wide monitor can otherwise exceed the
+// server cap, which used to get silently swallowed (see clamp below).
+const MAX_BBOX_SPAN_DEG = 0.32;
 
 function statusFromResult(data) {
   if (!data) return "unknown";
@@ -36,6 +42,22 @@ function padBounds(bounds, factor) {
   const padLon = (east - west) * factor;
   const padLat = (north - south) * factor;
   return { west: west - padLon, east: east + padLon, south: south - padLat, north: north + padLat };
+}
+
+// Shrinks a [min, max] span down to maxSpan around its own center, if needed.
+// Used so a wide monitor's padded viewport can never produce a bbox the
+// server rejects — it just fetches a slightly smaller area instead of
+// failing outright.
+function clampSpan(min, max, maxSpan) {
+  if (max - min <= maxSpan) return [min, max];
+  const center = (min + max) / 2;
+  return [center - maxSpan / 2, center + maxSpan / 2];
+}
+
+function clampBounds(padded, maxSpan) {
+  const [west, east] = clampSpan(padded.west, padded.east, maxSpan);
+  const [south, north] = clampSpan(padded.south, padded.north, maxSpan);
+  return { west, east, south, north };
 }
 
 export default function ExploreMap() {
@@ -88,11 +110,14 @@ export default function ExploreMap() {
   async function refreshZones() {
     const L = LRef.current;
     const map = mapRef.current;
-    if (!L || !map || !zonesGroupRef.current) return;
+    if (!L || !map) return;
 
     const zoom = map.getZoom();
     if (zoom < ZONE_MIN_ZOOM) {
-      zonesGroupRef.current.clearLayers();
+      if (zonesGroupRef.current) {
+        map.removeLayer(zonesGroupRef.current);
+        zonesGroupRef.current = null;
+      }
       setZonesHint("zoom-in");
       return;
     }
@@ -102,63 +127,71 @@ export default function ExploreMap() {
     const controller = new AbortController();
     zoneFetchAbortRef.current = controller;
 
-    const padded = padBounds(map.getBounds(), 0.3);
+    const padded = clampBounds(padBounds(map.getBounds(), ZONE_PAD_FACTOR), MAX_BBOX_SPAN_DEG);
     const bbox = [padded.west, padded.south, padded.east, padded.north].join(",");
 
+    let data;
     try {
       const res = await fetch(`/api/zones?bbox=${bbox}`, { signal: controller.signal });
-      const data = await res.json();
       if (controller.signal.aborted) return;
-
-      zonesGroupRef.current.clearLayers();
-
-      // Green "allowed" wash under everything — kom polygons drawn on top
-      // visually punch red through it, so unmarked ground (open countryside,
-      // small settlements PDOK doesn't flag) still reads as "mag wel".
-      L.rectangle(
-        [
-          [padded.south, padded.west],
-          [padded.north, padded.east],
-        ],
-        { fillColor: "#22c55e", fillOpacity: 0.16, color: "#22c55e", weight: 0, interactive: false }
-      ).addTo(zonesGroupRef.current);
-
-      if (!data.features) return;
-
-      L.geoJSON(data, {
-        style: (feature) => {
-          const inKom = feature.properties?.inKom;
-          return inKom
-            ? { fillColor: "#ef4444", fillOpacity: 0.4, color: "#b91c1c", weight: 1.5 }
-            : { fillColor: "#22c55e", fillOpacity: 0.28, color: "#15803d", weight: 1.5 };
-        },
-        onEachFeature: (feature, layer) => {
-          const { inKom, plaats } = feature.properties || {};
-          const tooltipText = inKom
-            ? `🔴 Bebouwde kom${plaats ? ` van ${plaats}` : ""} — wildplassen niet toegestaan`
-            : `🟢 Buiten bebouwde kom${plaats ? ` (${plaats})` : ""} — wildplassen toegestaan`;
-          layer.bindTooltip(tooltipText, { sticky: true, className: "zone-tooltip" });
-
-          const baseStyle = inKom
-            ? { fillColor: "#ef4444", fillOpacity: 0.4, color: "#b91c1c", weight: 1.5 }
-            : { fillColor: "#22c55e", fillOpacity: 0.28, color: "#15803d", weight: 1.5 };
-          const hoverStyle = { ...baseStyle, weight: 3, fillOpacity: baseStyle.fillOpacity + 0.15 };
-
-          layer.on("mouseover", () => layer.setStyle(hoverStyle));
-          layer.on("mouseout", () => layer.setStyle(baseStyle));
-          layer.on("click", (e) => {
-            L.DomEvent.stop(e);
-            setSuggestions([]);
-            checkPoint(e.latlng.lat, e.latlng.lng, plaats || null);
-          });
-        },
-      }).addTo(zonesGroupRef.current);
+      if (!res.ok) return; // keep whatever's currently shown rather than blanking it on a transient/edge-case failure
+      data = await res.json();
     } catch (err) {
-      if (err?.name !== "AbortError") {
-        // Zone shading is a progressive enhancement — silently skip on failure,
-        // the click-to-check flow still works everywhere.
-      }
+      return; // network error or aborted (superseded by a newer request) — keep existing zones visible
     }
+    if (controller.signal.aborted || !data?.features) return;
+
+    // Build the replacement layer group fully off to the side, then swap it
+    // in atomically (add new, then remove old) instead of clearing the live
+    // group in place — clearing first left a blank gap during the fetch, and
+    // could orphan an open hover tooltip on a layer that no longer existed.
+    const nextGroup = L.layerGroup();
+
+    // Green "allowed" wash under everything — kom polygons drawn on top
+    // visually punch red through it, so unmarked ground (open countryside,
+    // small settlements PDOK doesn't flag) still reads as "mag wel".
+    L.rectangle(
+      [
+        [padded.south, padded.west],
+        [padded.north, padded.east],
+      ],
+      { fillColor: "#22c55e", fillOpacity: 0.16, color: "#22c55e", weight: 0, interactive: false }
+    ).addTo(nextGroup);
+
+    L.geoJSON(data, {
+      style: (feature) => {
+        const inKom = feature.properties?.inKom;
+        return inKom
+          ? { fillColor: "#ef4444", fillOpacity: 0.4, color: "#b91c1c", weight: 1.5 }
+          : { fillColor: "#22c55e", fillOpacity: 0.28, color: "#15803d", weight: 1.5 };
+      },
+      onEachFeature: (feature, layer) => {
+        const { inKom, plaats } = feature.properties || {};
+        const tooltipText = inKom
+          ? `🔴 Bebouwde kom${plaats ? ` van ${plaats}` : ""} — wildplassen niet toegestaan`
+          : `🟢 Buiten bebouwde kom${plaats ? ` (${plaats})` : ""} — wildplassen toegestaan`;
+        layer.bindTooltip(tooltipText, { sticky: true, className: "zone-tooltip" });
+
+        const baseStyle = inKom
+          ? { fillColor: "#ef4444", fillOpacity: 0.4, color: "#b91c1c", weight: 1.5 }
+          : { fillColor: "#22c55e", fillOpacity: 0.28, color: "#15803d", weight: 1.5 };
+        const hoverStyle = { ...baseStyle, weight: 3, fillOpacity: baseStyle.fillOpacity + 0.15 };
+
+        layer.on("mouseover", () => layer.setStyle(hoverStyle));
+        layer.on("mouseout", () => layer.setStyle(baseStyle));
+        layer.on("click", (e) => {
+          L.DomEvent.stop(e);
+          setSuggestions([]);
+          checkPoint(e.latlng.lat, e.latlng.lng, plaats || null);
+        });
+      },
+    }).addTo(nextGroup);
+
+    if (controller.signal.aborted) return; // superseded while we were building the layer group
+    nextGroup.addTo(map);
+    const previousGroup = zonesGroupRef.current;
+    zonesGroupRef.current = nextGroup;
+    if (previousGroup) map.removeLayer(previousGroup);
   }
 
   function scheduleZoneRefresh() {
@@ -189,8 +222,6 @@ export default function ExploreMap() {
         attribution:
           '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>-bijdragers &copy; <a href="https://carto.com/attributions">CARTO</a>',
       }).addTo(map);
-
-      zonesGroupRef.current = L.layerGroup().addTo(map);
 
       map.on("click", (e) => {
         setSuggestions([]);
