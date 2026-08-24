@@ -63,7 +63,11 @@ h1 {
   font-weight: 900;
   letter-spacing: -0.02em;
   margin: 0 0 14px 0;
-  text-shadow: 0 2px 24px rgba(0, 0, 0, 0.6);
+  -webkit-text-stroke: 3px #000;
+  paint-order: stroke fill;
+  text-shadow:
+    0 0 10px rgba(0, 0, 0, 0.9),
+    0 4px 20px rgba(0, 0, 0, 0.6);
 }
 
 .subtext {
@@ -72,7 +76,11 @@ h1 {
   max-width: 26rem;
   margin: 0 auto 24px auto;
   line-height: 1.4;
-  text-shadow: 0 1px 12px rgba(0, 0, 0, 0.6);
+  -webkit-text-stroke: 1.5px #000;
+  paint-order: stroke fill;
+  text-shadow:
+    0 0 6px rgba(0, 0, 0, 0.85),
+    0 1px 12px rgba(0, 0, 0, 0.6);
 }
 
 .answer {
@@ -80,6 +88,11 @@ h1 {
   font-weight: 900;
   margin: 4px 0 12px 0;
   letter-spacing: -0.02em;
+  -webkit-text-stroke: 3px #000;
+  paint-order: stroke fill;
+  text-shadow:
+    0 0 10px rgba(0, 0, 0, 0.9),
+    0 4px 20px rgba(0, 0, 0, 0.6);
 }
 
 .answer.ja {
@@ -125,6 +138,9 @@ h1 {
   border: 1.5px solid rgba(255, 255, 255, 0.6);
   box-shadow: none;
   margin-top: 18px;
+  -webkit-text-stroke: 1.5px #000;
+  paint-order: stroke fill;
+  text-shadow: 0 0 6px rgba(0, 0, 0, 0.85);
 }
 
 .link-btn {
@@ -137,6 +153,9 @@ h1 {
   cursor: pointer;
   text-decoration: underline;
   text-underline-offset: 3px;
+  -webkit-text-stroke: 1px #000;
+  paint-order: stroke fill;
+  text-shadow: 0 0 6px rgba(0, 0, 0, 0.85);
 }
 
 .link-btn:hover {
@@ -151,6 +170,9 @@ h1 {
   margin-bottom: 22px;
   text-decoration: underline;
   text-underline-offset: 3px;
+  -webkit-text-stroke: 1px #000;
+  paint-order: stroke fill;
+  text-shadow: 0 0 6px rgba(0, 0, 0, 0.85);
 }
 
 .source-link:hover {
@@ -237,6 +259,9 @@ input::placeholder {
   margin: 0;
   font-size: 0.85rem;
   opacity: 0.9;
+  -webkit-text-stroke: 1px #000;
+  paint-order: stroke fill;
+  text-shadow: 0 0 6px rgba(0, 0, 0, 0.85);
 }
 
 .footnote {
@@ -244,5 +269,7 @@ input::placeholder {
   font-size: 0.72rem;
   opacity: 0.6;
   max-width: 24rem;
+  -webkit-text-stroke: 1px #000;
+  paint-order: stroke fill;
   text-shadow: 0 1px 8px rgba(0, 0, 0, 0.6);
 }
