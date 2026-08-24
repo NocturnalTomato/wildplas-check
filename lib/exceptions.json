@@ -1,11 +1,13 @@
 {
-  "_comment": "Some gemeentes explicitly extend the wildplas-verbod to named areas outside the bebouwde kom (e.g. a city park or forest). Match on plaats/gemeente name (lowercase) from the TOP10NL lookup. This list is a starting point, not exhaustive — extend as you research more APVs.",
+  "_comment": "Some gemeentes explicitly extend the wildplas-verbod to named areas outside the bebouwde kom (e.g. a city park or forest). Match on plaats/gemeente name (lowercase). gemeente must be the OFFICIAL PDOK Locatieserver name (e.g. \"'s-gravenhage\", not \"den haag\"; \"'s-hertogenbosch\", not \"den bosch\") since that's what /api/check's reverse-geocode lookup returns. This list is a starting point, not exhaustive — extend as you research more APVs.",
   "areas": [
     {
-      "gemeente": "den haag",
+      "gemeente": "'s-gravenhage",
       "plaats_bevat": "haagse bos",
       "allowed": false,
-      "note": "Het Haagse Bos ligt formeel buiten sommige bebouwde-kom-grenzen maar wordt in de Haagse APV behandeld als openbare plaats waar het verbod geldt."
+      "note": "Het Haagse Bos ligt formeel buiten sommige bebouwde-kom-grenzen maar wordt in de Haagse APV behandeld als openbare plaats waar het verbod geldt.",
+      "apv_url": "https://lokaleregelgeving.overheid.nl/CVDR11313/14",
+      "apv_label": "Lees het verbod in de APV van Den Haag"
     }
   ]
 }

@@ -3,15 +3,26 @@ import exceptions from "../../../lib/exceptions.json";
 
 // PDOK Locatieserver — free-text geocoding, no API key required.
 const LOCATIESERVER_URL = "https://api.pdok.nl/bzk/locatieserver/search/v3_1/free";
+const LOCATIESERVER_REVERSE_URL = "https://api.pdok.nl/bzk/locatieserver/search/v3_1/reverse";
 
 // PDOK BRT TOP10NL — modern OGC API Features (replaces the old WFS service, which
-// no longer resolves reliably). Collection "plaats_vlak" carries a bebouwdekom
-// boolean per polygon. Core OGC API Features only guarantees bbox filtering (no
-// point-intersects filter everywhere), so we query a small bbox around the point
-// and treat "any returned feature flagged bebouwdekom=true" as inside the kom.
-const TOP10NL_ITEMS_URL =
-  "https://api.pdok.nl/kadaster/brt-top10nl/ogc/v1/collections/plaats_vlak/items";
+// no longer resolves reliably). The bebouwde-kom flag lives on settlement-level
+// ("kern") polygons: single-part settlements are in "plaats_vlak", multi-part ones
+// (e.g. Amsterdam, which has disjoint enclaves/islands) are in "plaats_multivlak".
+// Neighbourhood-level polygons (buurt/wijk/stadsdeel), also returned by these
+// collections, always carry bebouwdekom="nee" regardless of location and must be
+// ignored. Core OGC API Features only guarantees bbox filtering (no point-intersects
+// filter everywhere), so we query a small bbox around the point and treat "any
+// returned kern-level feature flagged bebouwdekom=ja" as inside the kom.
+const TOP10NL_BASE_URL = "https://api.pdok.nl/kadaster/brt-top10nl/ogc/v1/collections";
+const TOP10NL_COLLECTIONS = ["plaats_vlak", "plaats_multivlak"];
+const KERN_TYPEGEBIED = new Set(["woonkern", "deelkern", "gehucht", "industriekern"]);
 const BBOX_EPS = 0.0006; // roughly ~65m, small relative to kom-polygon scale
+
+// Nationwide, government-run explainer of the wildplassen rule (politie.nl) — applies
+// everywhere, unlike APV text which is per-gemeente. Used for the two generic outcomes;
+// APV exceptions link to their own municipal regulation instead (see exceptions.json).
+const POLITIE_WILDPLASSEN_URL = "https://www.politie.nl/informatie/wat-is-wildplassen-en-welke-boete-staat-ervoor.html";
 
 async function geocode(address) {
   const url = `${LOCATIESERVER_URL}?q=${encodeURIComponent(address)}&rows=1&fl=weergavenaam,centroide_ll`;
@@ -30,6 +41,16 @@ async function geocode(address) {
   };
 }
 
+// Neither plaats_vlak nor plaats_multivlak carries the gemeente name, so we
+// resolve it separately via reverse geocoding.
+async function reverseGeocodeGemeente(lat, lon) {
+  const url = `${LOCATIESERVER_REVERSE_URL}?lat=${lat}&lon=${lon}&rows=1&fl=gemeentenaam`;
+  const res = await fetch(url);
+  if (!res.ok) return null;
+  const data = await res.json();
+  return data?.response?.docs?.[0]?.gemeentenaam || null;
+}
+
 function firstProp(props, keys) {
   for (const k of keys) {
     if (props[k] !== undefined && props[k] !== null) return props[k];
@@ -37,35 +58,36 @@ function firstProp(props, keys) {
   return null;
 }
 
-async function lookupBebouwdeKom(lat, lon) {
-  const bbox = [lon - BBOX_EPS, lat - BBOX_EPS, lon + BBOX_EPS, lat + BBOX_EPS].join(",");
-  const url = `${TOP10NL_ITEMS_URL}?f=json&bbox=${bbox}&limit=10`;
+// PDOK's OGC API Features returns bebouwdekom as the string "ja"/"nee", not a boolean.
+function isTruthyFlag(value) {
+  return value === true || value === "ja" || value === "true";
+}
 
+async function fetchKernFeatures(collection, bbox) {
+  const url = `${TOP10NL_BASE_URL}/${collection}/items?f=json&bbox=${bbox}&limit=50`;
   const res = await fetch(url, { headers: { Accept: "application/geo+json" } });
-  if (!res.ok) throw new Error(`top10nl_failed (${res.status})`);
+  if (!res.ok) throw new Error(`top10nl_failed (${collection} ${res.status})`);
   const data = await res.json();
   const features = data?.features || [];
+  return features.filter((f) => KERN_TYPEGEBIED.has(f.properties?.typegebied));
+}
 
-  // TEMP DEBUG: log the raw shape so we can confirm the real property names/values
-  // PDOK returns. Remove once verified.
-  console.log(
-    "DEBUG top10nl",
-    JSON.stringify({
-      bbox,
-      count: features.length,
-      firstProps: features[0]?.properties ?? null,
-      allBebouwdekomValues: features.map((f) => f?.properties?.bebouwdekom),
-    })
+async function lookupBebouwdeKom(lat, lon) {
+  const bbox = [lon - BBOX_EPS, lat - BBOX_EPS, lon + BBOX_EPS, lat + BBOX_EPS].join(",");
+
+  const results = await Promise.all(
+    TOP10NL_COLLECTIONS.map((collection) => fetchKernFeatures(collection, bbox))
   );
+  const features = results.flat();
 
   if (features.length === 0) {
-    // No plaats-polygon anywhere near this point -> outside any bebouwde kom.
+    // No settlement (kern) polygon anywhere near this point -> outside any bebouwde kom.
     return { insideKom: false, gemeente: null, plaats: null };
   }
 
   const inKomFeature = features.find((f) => {
     const props = f.properties || {};
-    return firstProp(props, ["bebouwdekom", "BEBOUWDEKOM", "Bebouwdekom"]) === true;
+    return isTruthyFlag(firstProp(props, ["bebouwdekom", "BEBOUWDEKOM", "Bebouwdekom"]));
   });
 
   const feature = inKomFeature || features[0];
@@ -73,7 +95,6 @@ async function lookupBebouwdeKom(lat, lon) {
 
   return {
     insideKom: Boolean(inKomFeature),
-    gemeente: firstProp(props, ["gemeentenaam", "GEMEENTENAAM", "gemeente"]),
     plaats: firstProp(props, ["naamnl", "naam", "NAAM", "naamNL"]),
   };
 }
@@ -115,7 +136,10 @@ export async function GET(request) {
       );
     }
 
-    const { insideKom, gemeente, plaats } = await lookupBebouwdeKom(lat, lon);
+    const [{ insideKom, plaats }, gemeente] = await Promise.all([
+      lookupBebouwdeKom(lat, lon),
+      reverseGeocodeGemeente(lat, lon),
+    ]);
 
     const exception = checkExceptions(gemeente, plaats);
     if (exception) {
@@ -126,6 +150,9 @@ export async function GET(request) {
         plaats,
         label,
         source: "exception-list",
+        link: exception.apv_url
+          ? { url: exception.apv_url, label: exception.apv_label || "Lees de APV-bepaling" }
+          : null,
       });
     }
 
@@ -137,6 +164,7 @@ export async function GET(request) {
         plaats,
         label,
         source: "top10nl",
+        link: { url: POLITIE_WILDPLASSEN_URL, label: "Waarom dit verboden is (politie.nl)" },
       });
     }
 
@@ -147,6 +175,7 @@ export async function GET(request) {
       plaats,
       label,
       source: "top10nl",
+      link: { url: POLITIE_WILDPLASSEN_URL, label: "Meer over de regels (politie.nl)" },
     });
   } catch (err) {
     console.error("check_failed", err);

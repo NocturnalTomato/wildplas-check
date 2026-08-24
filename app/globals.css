@@ -13,6 +13,7 @@ body {
 }
 
 .wrap {
+  position: relative;
   min-height: 100dvh;
   display: flex;
   flex-direction: column;
@@ -20,96 +21,163 @@ body {
   justify-content: center;
   text-align: center;
   padding: 24px;
-  transition: background-color 0.3s ease;
+  overflow: hidden;
 }
 
-.wrap.ja {
-  background: #0d3b17;
+.bg-photo {
+  position: fixed;
+  inset: 0;
+  z-index: -2;
+  filter: grayscale(1) contrast(1.1);
 }
 
-.wrap.nee {
-  background: #4a0d0d;
+.bg-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background: linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 0.55) 0%,
+    rgba(0, 0, 0, 0.35) 40%,
+    rgba(0, 0, 0, 0.75) 100%
+  );
 }
 
-.wrap.onbekend {
-  background: #1a1a1a;
+.content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  max-width: 26rem;
 }
 
 h1 {
-  font-size: clamp(2.2rem, 9vw, 4.5rem);
+  font-size: clamp(2.1rem, 8vw, 3.6rem);
   line-height: 1.05;
   font-weight: 900;
   letter-spacing: -0.02em;
-  margin: 0 0 24px 0;
+  margin: 0 0 14px 0;
+  text-shadow: 0 2px 24px rgba(0, 0, 0, 0.6);
+}
+
+.subtext {
+  font-size: 1rem;
+  opacity: 0.9;
+  max-width: 26rem;
+  margin: 0 auto 24px auto;
+  line-height: 1.4;
+  text-shadow: 0 1px 12px rgba(0, 0, 0, 0.6);
 }
 
 .answer {
-  font-size: clamp(3rem, 16vw, 7rem);
+  font-size: clamp(3.5rem, 18vw, 7rem);
   font-weight: 900;
-  margin: 8px 0 16px 0;
+  margin: 4px 0 12px 0;
+  letter-spacing: -0.02em;
 }
 
-.detail {
-  font-size: 1rem;
-  opacity: 0.85;
-  max-width: 32rem;
-  margin: 0 auto 24px auto;
-  line-height: 1.4;
+.answer.ja {
+  color: #7fe08a;
 }
 
-.actions {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  width: 100%;
-  max-width: 22rem;
+.answer.nee {
+  color: #f08a8a;
 }
 
-button, input {
-  font-size: 1rem;
-  padding: 14px 16px;
-  border-radius: 12px;
+.answer.onbekend {
+  color: #fff;
+}
+
+.cta {
+  font-size: 1.1rem;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  padding: 18px 32px;
+  border-radius: 999px;
   border: none;
-}
-
-button {
   background: #fff;
   color: #000;
-  font-weight: 700;
   cursor: pointer;
+  width: 100%;
+  max-width: 22rem;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
 }
 
-button:disabled {
-  opacity: 0.6;
-  cursor: default;
+.cta:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 34px rgba(0, 0, 0, 0.5);
 }
 
-input {
-  background: rgba(255, 255, 255, 0.1);
+.cta:active {
+  transform: translateY(0);
+}
+
+.cta-secondary {
+  background: transparent;
   color: #fff;
-  border: 1px solid rgba(255, 255, 255, 0.3);
+  border: 1.5px solid rgba(255, 255, 255, 0.6);
+  box-shadow: none;
+  margin-top: 18px;
 }
 
-input::placeholder {
-  color: rgba(255, 255, 255, 0.6);
+.link-btn {
+  background: none;
+  border: none;
+  color: #fff;
+  opacity: 0.75;
+  font-size: 0.9rem;
+  padding: 14px 8px;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 
-.divider {
-  opacity: 0.6;
-  font-size: 0.85rem;
-  margin: 4px 0;
+.link-btn:hover {
+  opacity: 1;
 }
 
-.footnote {
-  margin-top: 28px;
-  font-size: 0.75rem;
-  opacity: 0.5;
-  max-width: 24rem;
+.source-link {
+  display: inline-block;
+  color: #fff;
+  font-size: 0.9rem;
+  opacity: 0.85;
+  margin-bottom: 22px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.source-link:hover {
+  opacity: 1;
+}
+
+.address-panel {
+  width: 100%;
+  max-width: 22rem;
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
 }
 
 .autocomplete {
   position: relative;
   width: 100%;
+}
+
+input {
+  font-size: 1rem;
+  padding: 14px 16px;
+  border-radius: 12px;
+  width: 100%;
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  backdrop-filter: blur(4px);
+}
+
+input::placeholder {
+  color: rgba(255, 255, 255, 0.65);
 }
 
 .suggestions {
@@ -144,11 +212,10 @@ input::placeholder {
 
 .map-wrap {
   width: 100%;
-  max-width: 22rem;
-  margin: 0 0 20px 0;
   display: flex;
   flex-direction: column;
   gap: 10px;
+  align-items: center;
 }
 
 .map-box {
@@ -156,11 +223,20 @@ input::placeholder {
   width: 100%;
   border-radius: 14px;
   overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  filter: grayscale(0.6);
 }
 
 .map-label {
   margin: 0;
   font-size: 0.85rem;
-  opacity: 0.85;
+  opacity: 0.9;
+}
+
+.footnote {
+  margin-top: 26px;
+  font-size: 0.72rem;
+  opacity: 0.6;
+  max-width: 24rem;
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.6);
 }

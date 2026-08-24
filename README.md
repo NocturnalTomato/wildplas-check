@@ -48,12 +48,36 @@ Geen eigen database nodig — alle geodata wordt live bevraagd bij PDOK. `except
 is de enige plek die handmatig onderzoek vereist en kan groeien naarmate je meer
 gemeenten natrekt.
 
+## Dagelijkse APV-check (cron)
+
+`app/api/cron/apv-watch/route.js` draait dagelijks via Vercel Cron (`vercel.json`,
+05:00 UTC) en helpt `lib/exceptions.json` actueel te houden:
+
+1. Vraagt bij KOOP's CVDR-zoekdienst (`zoekservice.overheid.nl/sru`) op welke
+   gemeente-APV's de laatste dagen zijn gewijzigd.
+2. Haalt van elke recent gewijzigde APV de volledige tekst op en zoekt naar
+   wildplassen-gerelateerde bepalingen ("wildplassen", "natuurlijke behoefte
+   doen", "urineren").
+3. Filtert gevonden bepalingen die simpelweg de standaard VNG-scope bevestigen
+   (verboden **binnen de bebouwde kom**) eruit — dat is al de aanname van dit
+   hele project, dus geen actie nodig. Alleen bepalingen die daarvan afwijken
+   (geen "bebouwde kom" in de buurt van de match — bv. een met naam genoemd
+   gebied zoals het Haagse Bos) worden als `findings` gerapporteerd, mét link
+   naar het CVDR-document.
+4. De job **bewerkt `exceptions.json` niet automatisch** — een gevonden
+   afwijkende bepaling vraagt om een menselijke lezing (wat staat er *precies*,
+   geldt het echt buiten de bebouwde kom, etc.). Bekijk de Vercel-cronlogs
+   (`APV_WATCH_FINDING`) en werk `exceptions.json` handmatig bij.
+
+Zet in de Vercel-projectinstellingen een env var `CRON_SECRET` (willekeurige
+string) — Vercel stuurt die automatisch mee als bearer-token bij cron-aanroepen
+en de route weigert verzoeken zonder de juiste token.
+
 ## TODO / bekende risico's
 
-- **Verifieer `TOP10NL_TYPENAME`** in `app/api/check/route.js` tegen een actuele
-  `DescribeFeatureType` call — PDOK-laagnamen wijzigen af en toe tussen TOP10NL-releases.
-- Uitbreiden van `lib/exceptions.json` met meer gemeenten na verder onderzoek.
-- Eventueel cachen van WFS-responses (Vercel Edge Cache / KV) als verkeer toeneemt.
+- Uitbreiden van `lib/exceptions.json` met meer gemeenten op basis van de
+  `apv-watch`-cron findings.
+- Eventueel cachen van PDOK-responses (Vercel Edge Cache / KV) als verkeer toeneemt.
 
 ## Development
 
