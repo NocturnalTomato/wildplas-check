@@ -1,4 +1,160 @@
 {
-  "_comment": "Some gemeentes explicitly extend the wildplas-verbod to areas outside the bebouwde kom. gemeente must be the OFFICIAL PDOK Locatieserver name (e.g. \"'s-gravenhage\", not \"den haag\"; \"'s-hertogenbosch\", not \"den bosch\") since that's what /api/check's reverse-geocode lookup returns. Two ways to match within a gemeente: (1) `plaats_bevat` — a lowercase substring of `plaats` (the PDOK kern name), good when the named area effectively IS the kern. (2) `center` {lat, lon} + `radius_m` — a point-radius match, required when the APV designates a SMALL specific area (a JOP, a parking lot, a strip of beach) that shares its `plaats` value with the surrounding village/town; a plaats_bevat match there would wrongly flag the whole place. This list is a starting point, not exhaustive — extend as you research more APVs. NOTE (2026-08-24): the previous 's-gravenhage/Haagse Bos entry was removed — it linked to an old APV version (CVDR11313/14), and the currently in-force Den Haag APV (CVDR11313/70, checked via lokaleregelgeving.overheid.nl) no longer mentions 'Haagse Bos' or even the word 'bos' anywhere in its natuurlijke-behoefte article (artikel 4:8) or the rest of the text — that carve-out appears to have been repealed at some point between those versions. Re-add it (with a current apv_url) only if you find it's actually still in force somewhere, e.g. via a separate aanwijzingsbesluit.",
-  "areas": []
+  "_comment": "Some gemeentes explicitly extend the wildplas-verbod to areas outside the bebouwde kom. gemeente must be the OFFICIAL PDOK Locatieserver name (e.g. \"'s-gravenhage\", not \"den haag\"; \"'s-hertogenbosch\", not \"den bosch\") since that's what /api/check's reverse-geocode lookup returns. Two ways to match within a gemeente: (1) `plaats_bevat` — a lowercase substring of `plaats` (the PDOK kern name), good when the named area effectively IS the kern. (2) `center` {lat, lon} + `radius_m` — a point-radius match, required when the APV designates a SMALL specific area (a JOP, a parking lot, a strip of beach) that shares its `plaats` value with the surrounding village/town; a plaats_bevat match there would wrongly flag the whole place. Neither field set at all (just `gemeente`) means an unconditional match anywhere in that gemeente — used below for gemeentes whose APV has no bebouwde-kom qualifier at all, so the ban applies gemeente-wide. This list is a starting point, not exhaustive — extend as you research more APVs. NOTE (2026-08-24): the previous 's-gravenhage/Haagse Bos entry was removed — it linked to an old APV version (CVDR11313/14), and the currently in-force Den Haag APV (CVDR11313/70, checked via lokaleregelgeving.overheid.nl) no longer mentions 'Haagse Bos' or even the word 'bos' anywhere in its natuurlijke-behoefte article (artikel 4:8) or the rest of the text — that carve-out appears to have been repealed at some point between those versions. Re-add it (with a current apv_url) only if you find it's actually still in force somewhere, e.g. via a separate aanwijzingsbesluit. NOTE (2026-08-24, second pass): a backfill scan of all ~317 in-force gemeente APVs for wildplassen-related clauses (see scripts/apv-backfill-findings.json, 72 findings) was worked through end-to-end, reading each full in-force article text rather than trusting the scan snippet. The 17 entries below with only `gemeente` set are the confirmed real deviations of one pattern: no 'binnen de bebouwde kom' qualifier at all, so the ban is gemeente-wide. NOTE (2026-08-24, third pass — small-area delegation cases): a second pattern — an APV that delegates a 'buiten de bebouwde kom' extension to a college/burgemeester-aanwijzingsbesluit naming a small concrete area — was confirmed for Bodegraven-Reeuwijk (artikel 4:8, register CVDR296950/33, 5 named sub-areas), Putten (CVDR622669/15, artikel 8: 'delen van het recreatiegebied Nulde... met uitzondering van de groen gekleurde terreinen' — a partial-polygon carve-out only shown on an attached map, bijlage 2 — NOT added: no single point/radius can represent 'this area minus these sub-parts' without risking wrongly including excluded terrain; a human should trace bijlage 2 before adding), Albrandswaard (CVDR692035/1, artikel 4:8: 'het groengebied, aan de kant van de Groenendijk, bij Distripark' — NOT added: 'Groenendijk' isn't a registered PDOK/OSM street or feature near Albrandswaard, and the actual boundary is only on the besluit's own map — geocoding it would mean guessing), and Berg en Dal (CVDR628203/1, artikel 8: 'recreatiegebied Wylerbergmeer' — ADDED below, since Wylerbergmeer is a single, unambiguous, OSM-mapped lake/recreation area, unlike the other three). Within Bodegraven-Reeuwijk's own 5 sub-areas, only 3 were confident enough to geocode and add (Reeuwijkse Hout — a distinct OSM-mapped park; de JOP aan de Burgemeester Kremerweg and de parkeerplaats bij Fort Wierickerschans — both pinned to a specific street/address from the besluit's own text); 'het recreatieterrein aan de Twaalfmorgen' and 'het Elfhoevenstrand' were left OUT because Twaalfmorgen only resolves to a ~2km road with no distinct recreatieterrein feature, and the Elfhoeven area has multiple similarly-named lakes (Elfhoeven, Kleine Elfhoeven) with no feature specifically named 'Elfhoevenstrand' — picking one point would be a guess. All `center`/`radius_m` values below are best-effort circles around a named-place geocode, not the besluit's own map boundary — treat radius as generous-but-approximate, and prefer to shrink/adjust it if someone finds the actual bijlage.",
+  "areas": [
+    {
+      "gemeente": "zwartewaterland",
+      "allowed": false,
+      "note": "De huidige APV van Zwartewaterland (artikel 4:8) verbiedt wildplassen zonder de gebruikelijke beperking 'binnen de bebouwde kom' — de tekst luidt simpelweg 'Het is verboden op een openbare plaats zijn natuurlijke behoefte te doen.' Daarmee geldt het verbod in de hele gemeente, ook buiten de bebouwde kom.",
+      "apv_url": "https://lokaleregelgeving.overheid.nl/CVDR300137/6",
+      "apv_label": "APV Zwartewaterland, artikel 4:8 (Natuurlijke behoefte doen)"
+    },
+    {
+      "gemeente": "winterswijk",
+      "allowed": false,
+      "note": "De huidige APV van Winterswijk (artikel 4.8) verbiedt wildplassen zonder de beperking 'binnen de bebouwde kom' — de tekst luidt 'Het is verboden op een openbare plaats de natuurlijke behoefte te doen.' Het verbod geldt dus in de hele gemeente.",
+      "apv_url": "https://lokaleregelgeving.overheid.nl/CVDR628672/6",
+      "apv_label": "APV Winterswijk, artikel 4.8 (Natuurlijke behoefte doen)"
+    },
+    {
+      "gemeente": "woudenberg",
+      "allowed": false,
+      "note": "De huidige APV van Woudenberg (artikel 4:8) verbiedt wildplassen zonder de beperking 'binnen de bebouwde kom' — lid 1 luidt 'Het is verboden op een openbare plaats zijn natuurlijke behoefte te doen.' Het verbod geldt dus gemeentebreed.",
+      "apv_url": "https://lokaleregelgeving.overheid.nl/CVDR706623/3",
+      "apv_label": "APV Woudenberg, artikel 4:8 (Natuurlijke behoefte doen)"
+    },
+    {
+      "gemeente": "hof van twente",
+      "allowed": false,
+      "note": "De huidige APV van Hof van Twente (artikel 4:8) verbiedt wildplassen zonder de beperking 'binnen de bebouwde kom' — de tekst luidt 'Het is verboden op een openbare plaats de natuurlijke behoefte te doen.' Het verbod geldt dus gemeentebreed.",
+      "apv_url": "https://lokaleregelgeving.overheid.nl/CVDR740985/1",
+      "apv_label": "APV Hof van Twente, artikel 4:8 (Natuurlijke behoefte doen)"
+    },
+    {
+      "gemeente": "montferland",
+      "allowed": false,
+      "note": "De huidige APV van Montferland (artikel 4:8) verbiedt wildplassen zonder de beperking 'binnen de bebouwde kom' — de tekst luidt 'Het is verboden op een openbare plaats zijn natuurlijke behoefte te doen buiten daarvoor bestemde plaatsen.' Het verbod geldt dus gemeentebreed.",
+      "apv_url": "https://lokaleregelgeving.overheid.nl/CVDR244729/13",
+      "apv_label": "APV Montferland, artikel 4:8 (Natuurlijke behoefte doen)"
+    },
+    {
+      "gemeente": "nissewaard",
+      "allowed": false,
+      "note": "De huidige APV van Nissewaard (artikel 4:8) verbiedt wildplassen zonder de beperking 'binnen de bebouwde kom' — de tekst luidt 'Het is verboden op een openbare plaats zijn natuurlijke behoefte te doen buiten de daarvoor bestemde toiletgelegenheden.' Het verbod geldt dus gemeentebreed.",
+      "apv_url": "https://lokaleregelgeving.overheid.nl/CVDR639813/8",
+      "apv_label": "APV Nissewaard, artikel 4:8 (Natuurlijke behoefte doen)"
+    },
+    {
+      "gemeente": "velsen",
+      "allowed": false,
+      "note": "De huidige APV van Velsen (artikel 6:8) verbiedt wildplassen zonder de beperking 'binnen de bebouwde kom' — de tekst luidt 'Het is verboden op een openbare plaats de natuurlijke behoefte te doen buiten daarvoor bestemde plaatsen.' Het verbod geldt dus gemeentebreed.",
+      "apv_url": "https://lokaleregelgeving.overheid.nl/CVDR711291/2",
+      "apv_label": "APV Velsen, artikel 6:8 (Natuurlijke behoefte doen)"
+    },
+    {
+      "gemeente": "stein",
+      "allowed": false,
+      "note": "De huidige APV van Stein (artikel 4:7) verbiedt wildplassen zonder de beperking 'binnen de bebouwde kom' — de tekst luidt 'Het is verboden op een openbare plaats zijn natuurlijke behoefte te doen buiten daarvoor bestemde plaatsen.' Het verbod geldt dus gemeentebreed.",
+      "apv_url": "https://lokaleregelgeving.overheid.nl/CVDR748688/1",
+      "apv_label": "APV Stein, artikel 4:7 (Natuurlijke behoefte doen)"
+    },
+    {
+      "gemeente": "lansingerland",
+      "allowed": false,
+      "note": "De huidige APV van Lansingerland (artikel 4:8) verbiedt wildplassen zonder de beperking 'binnen de bebouwde kom' — de tekst luidt 'Het is verboden op een openbare plaats zijn natuurlijke behoefte te doen buiten daarvoor bestemde plaatsen.' Het verbod geldt dus gemeentebreed.",
+      "apv_url": "https://lokaleregelgeving.overheid.nl/CVDR735888/1",
+      "apv_label": "APV Lansingerland, artikel 4:8 (Natuurlijke behoefte doen)"
+    },
+    {
+      "gemeente": "zaltbommel",
+      "allowed": false,
+      "note": "De huidige APV van Zaltbommel (artikel 4:8) verbiedt wildplassen zonder de beperking 'binnen de bebouwde kom' — de tekst luidt 'Het is verboden op een openbare plaats of op het terrein van een ander natuurlijke behoeften te verrichten.' Het verbod geldt dus gemeentebreed (en is zelfs breder dan gebruikelijk: ook op andermans terrein).",
+      "apv_url": "https://lokaleregelgeving.overheid.nl/CVDR738167/1",
+      "apv_label": "APV Zaltbommel, artikel 4:8 (Natuurlijke behoefte doen)"
+    },
+    {
+      "gemeente": "middelburg",
+      "allowed": false,
+      "note": "De huidige APV van Middelburg (artikel 2.43) verbiedt wildplassen zonder de beperking 'binnen de bebouwde kom' — de tekst luidt 'Het is verboden op een openbare plaats zijn natuurlijke behoefte te doen buiten een daarvoor bestemde inrichting of plaats.' Het verbod geldt dus gemeentebreed.",
+      "apv_url": "https://lokaleregelgeving.overheid.nl/CVDR738878/1",
+      "apv_label": "APV Middelburg, artikel 2.43 (Natuurlijke behoefte doen)"
+    },
+    {
+      "gemeente": "ouder-amstel",
+      "allowed": false,
+      "note": "De huidige APV van Ouder-Amstel (artikel 4:8) verbiedt wildplassen zonder de beperking 'binnen de bebouwde kom' — de tekst luidt 'Het is verboden op een openbare plaats zijn natuurlijke behoefte te doen buiten daarvoor bestemde plaatsen.' Het verbod geldt dus gemeentebreed.",
+      "apv_url": "https://lokaleregelgeving.overheid.nl/CVDR712910/1",
+      "apv_label": "APV Ouder-Amstel, artikel 4:8 (Natuurlijke behoefte doen)"
+    },
+    {
+      "gemeente": "hellendoorn",
+      "allowed": false,
+      "note": "De huidige APV van Hellendoorn (artikel 4:8) verbiedt wildplassen zonder de beperking 'binnen de bebouwde kom' — de tekst luidt 'Het is verboden op een openbare plaats zijn natuurlijke behoefte te doen buiten daarvoor bestemde plaatsen.' Het verbod geldt dus gemeentebreed.",
+      "apv_url": "https://lokaleregelgeving.overheid.nl/CVDR743312/1",
+      "apv_label": "APV Hellendoorn, artikel 4:8 (Natuurlijke behoefte doen)"
+    },
+    {
+      "gemeente": "opmeer",
+      "allowed": false,
+      "note": "De huidige APV van Opmeer (artikel 4:8) verbiedt wildplassen zonder de beperking 'binnen de bebouwde kom' — de tekst luidt 'Het is verboden op een openbare plaats zijn natuurlijke behoefte te doen buiten daarvoor bestemde plaatsen.' Het verbod geldt dus gemeentebreed.",
+      "apv_url": "https://lokaleregelgeving.overheid.nl/CVDR749499/1",
+      "apv_label": "APV Opmeer, artikel 4:8 (Natuurlijke behoefte doen)"
+    },
+    {
+      "gemeente": "capelle aan den ijssel",
+      "allowed": false,
+      "note": "De huidige APV van Capelle aan den IJssel (artikel 4:7) verbiedt wildplassen zonder de beperking 'binnen de bebouwde kom' — de tekst luidt 'Het is verboden op een openbare plaats zijn natuurlijke behoefte te doen buiten daarvoor bestemde plaatsen.' Het verbod geldt dus gemeentebreed.",
+      "apv_url": "https://lokaleregelgeving.overheid.nl/CVDR610246/9",
+      "apv_label": "APV Capelle aan den IJssel, artikel 4:7 (Natuurlijke behoefte doen)"
+    },
+    {
+      "gemeente": "valkenburg aan de geul",
+      "allowed": false,
+      "note": "In Valkenburg aan de Geul staat wildplassen niet meer in de APV zelf (artikel 4:8 is vervallen) maar in de Verordening Fysieke Leefomgeving, artikel 3.3.1: 'Het is verboden op een openbare plaats de natuurlijke behoefte te doen buiten daarvoor bestemde plaatsen.' Zonder de beperking 'binnen de bebouwde kom' geldt dit verbod gemeentebreed. (De APV bevat daarnaast nog een los artikel 2:47 over 'hinderlijk gedrag' dat naaktheid/wildplassen met veroorzaakte overlast verbiedt, maar dat is een aanvullend overlast-artikel, geen zelfstandige gebiedsafbakening.)",
+      "apv_url": "https://lokaleregelgeving.overheid.nl/CVDR674069/3",
+      "apv_label": "Verordening Fysieke Leefomgeving Valkenburg aan de Geul, artikel 3.3.1 (Natuurlijke behoefte doen)"
+    },
+    {
+      "gemeente": "amsterdam",
+      "allowed": false,
+      "note": "De huidige APV van Amsterdam (artikel 5.11, 'Doen van natuurlijke behoefte') verbiedt wildplassen zonder de beperking 'binnen de bebouwde kom' — de tekst luidt 'Het is verboden op of aan de weg buiten een urinoir of andere toiletgelegenheid datgene te verrichten waarvoor een toiletgelegenheid is bestemd.' Het verbod geldt dus in heel Amsterdam, ook in gebieden die niet als bebouwde kom gelden. (Het aparte artikel 2.8A over alcoholverbodsgebieden noemt 'wildplassen' alleen als voorbeeld van overlast en is geen zelfstandige wildplas-bepaling.)",
+      "apv_url": "https://lokaleregelgeving.overheid.nl/CVDR72510/56",
+      "apv_label": "APV Amsterdam 2008, artikel 5.11 (Doen van natuurlijke behoefte)"
+    },
+    {
+      "gemeente": "berg en dal",
+      "center": { "lat": 51.8263, "lon": 5.9442 },
+      "radius_m": 500,
+      "allowed": false,
+      "note": "De APV van Berg en Dal blijft standaard (verboden binnen de bebouwde kom), maar het bijbehorende Aanwijzingsbesluit APV wijst voor artikel 4:8 ook het recreatiegebied Wylerbergmeer buiten de bebouwde kom aan als verboden gebied. Cirkel rond het meer zelf (OSM: 'Wylerbergmeer', natural=water) — benaderend, het besluit verwijst zelf niet naar een aparte kaart voor dit artikel.",
+      "apv_url": "https://lokaleregelgeving.overheid.nl/CVDR628203/1",
+      "apv_label": "Aanwijzingsbesluit APV Berg en Dal, artikel 8 (Natuurlijke behoefte doen)"
+    },
+    {
+      "gemeente": "bodegraven-reeuwijk",
+      "center": { "lat": 52.0610, "lon": 4.7416 },
+      "radius_m": 900,
+      "allowed": false,
+      "note": "Naast de bebouwde kom wijst het 'Register nadere regels, beleid en aanwijzingsbesluiten' bij artikel 4:8 ook het Reeuwijkse Hout in Reeuwijk-Brug aan als verboden gebied voor wildplassen (zie bijlage 13a bij dat register voor de exacte kaartgrens — deze cirkel is een benadering rond het hele park, OSM: 'Reeuwijkse Hout', leisure=park).",
+      "apv_url": "https://lokaleregelgeving.overheid.nl/CVDR296950/33",
+      "apv_label": "Register aanwijzingsbesluiten APV Bodegraven-Reeuwijk, artikel 4:8 (Natuurlijke behoefte doen)"
+    },
+    {
+      "gemeente": "bodegraven-reeuwijk",
+      "center": { "lat": 52.0851, "lon": 4.7595 },
+      "radius_m": 250,
+      "allowed": false,
+      "note": "Naast de bebouwde kom wijst hetzelfde register ook de jongerenontmoetingsplaats (JOP) aan de Burgemeester Kremerweg in Bodegraven aan als verboden gebied (bijlage 13d). Cirkel rond het middendeel van de Burgemeester Kremerweg — benaderend, de JOP zelf staat alleen op de bijgevoegde kaart.",
+      "apv_url": "https://lokaleregelgeving.overheid.nl/CVDR296950/33",
+      "apv_label": "Register aanwijzingsbesluiten APV Bodegraven-Reeuwijk, artikel 4:8 (Natuurlijke behoefte doen)"
+    },
+    {
+      "gemeente": "bodegraven-reeuwijk",
+      "center": { "lat": 52.08201, "lon": 4.78300 },
+      "radius_m": 150,
+      "allowed": false,
+      "note": "Naast de bebouwde kom wijst hetzelfde register ook de parkeerplaats bij Fort Wierickerschans aan de Zuidzijde 132 in Bodegraven aan als verboden gebied (bijlage 13e). Cirkel rond dat adres (PDOK: 'Zuidzijde 132, 2411RX Bodegraven').",
+      "apv_url": "https://lokaleregelgeving.overheid.nl/CVDR296950/33",
+      "apv_label": "Register aanwijzingsbesluiten APV Bodegraven-Reeuwijk, artikel 4:8 (Natuurlijke behoefte doen)"
+    }
+  ]
 }
