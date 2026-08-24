@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import "leaflet/dist/leaflet.css";
+import { createPinIcon } from "./mapIcons";
 
 export default function LocationMap({ lat, lon }) {
   const containerRef = useRef(null);
@@ -16,27 +17,23 @@ export default function LocationMap({ lat, lon }) {
       const L = (await import("leaflet")).default;
       if (cancelled || !containerRef.current || mapRef.current) return;
 
-      // Leaflet's default marker icon path breaks under bundlers — point at the CDN instead.
-      delete L.Icon.Default.prototype._getIconUrl;
-      L.Icon.Default.mergeOptions({
-        iconRetinaUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
-        iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
-        shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
-      });
-
       const map = L.map(containerRef.current, {
-        zoomControl: false,
+        zoomControl: true,
         attributionControl: true,
       }).setView([lat, lon], 17);
+      map.zoomControl.setPosition("bottomright");
 
-      // OSM tiles: fine for a low-traffic hobby project. For real traffic, swap for
-      // PDOK's BRT-Achtergrondkaart WMTS to stay within OSM's tile usage policy.
-      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-        maxZoom: 19,
-        attribution: "&copy; OpenStreetMap-bijdragers",
+      // CARTO's Voyager style: a clean, colourful, modern basemap in the same
+      // spirit as Google Maps. Free for reasonable hobby-project traffic; for
+      // heavy traffic swap for PDOK's BRT-Achtergrondkaart WMTS instead.
+      L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", {
+        maxZoom: 20,
+        subdomains: "abcd",
+        attribution:
+          '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>-bijdragers &copy; <a href="https://carto.com/attributions">CARTO</a>',
       }).addTo(map);
 
-      markerRef.current = L.marker([lat, lon]).addTo(map);
+      markerRef.current = L.marker([lat, lon], { icon: createPinIcon(L, "select") }).addTo(map);
       mapRef.current = map;
     })();
 

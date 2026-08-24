@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import exceptions from "../../../lib/exceptions.json";
+import { fetchKernFeaturesInBbox, firstProp, isTruthyFlag } from "../../../lib/top10nl.js";
+import { findWildplasApvLink } from "../../../lib/apvLookup.js";
 
 // PDOK Locatieserver — free-text geocoding, no API key required.
 const LOCATIESERVER_URL = "https://api.pdok.nl/bzk/locatieserver/search/v3_1/free";
@@ -14,9 +16,6 @@ const LOCATIESERVER_REVERSE_URL = "https://api.pdok.nl/bzk/locatieserver/search/
 // ignored. Core OGC API Features only guarantees bbox filtering (no point-intersects
 // filter everywhere), so we query a small bbox around the point and treat "any
 // returned kern-level feature flagged bebouwdekom=ja" as inside the kom.
-const TOP10NL_BASE_URL = "https://api.pdok.nl/kadaster/brt-top10nl/ogc/v1/collections";
-const TOP10NL_COLLECTIONS = ["plaats_vlak", "plaats_multivlak"];
-const KERN_TYPEGEBIED = new Set(["woonkern", "deelkern", "gehucht", "industriekern"]);
 const BBOX_EPS = 0.0006; // roughly ~65m, small relative to kom-polygon scale
 
 // Nationwide, government-run explainer of the wildplassen rule (politie.nl) — applies
@@ -56,34 +55,9 @@ async function reverseGeocodeGemeente(lat, lon) {
   return data?.response?.docs?.[0]?.gemeentenaam || null;
 }
 
-function firstProp(props, keys) {
-  for (const k of keys) {
-    if (props[k] !== undefined && props[k] !== null) return props[k];
-  }
-  return null;
-}
-
-// PDOK's OGC API Features returns bebouwdekom as the string "ja"/"nee", not a boolean.
-function isTruthyFlag(value) {
-  return value === true || value === "ja" || value === "true";
-}
-
-async function fetchKernFeatures(collection, bbox) {
-  const url = `${TOP10NL_BASE_URL}/${collection}/items?f=json&bbox=${bbox}&limit=50`;
-  const res = await fetch(url, { headers: { Accept: "application/geo+json" } });
-  if (!res.ok) throw new Error(`top10nl_failed (${collection} ${res.status})`);
-  const data = await res.json();
-  const features = data?.features || [];
-  return features.filter((f) => KERN_TYPEGEBIED.has(f.properties?.typegebied));
-}
-
 async function lookupBebouwdeKom(lat, lon) {
   const bbox = [lon - BBOX_EPS, lat - BBOX_EPS, lon + BBOX_EPS, lat + BBOX_EPS].join(",");
-
-  const results = await Promise.all(
-    TOP10NL_COLLECTIONS.map((collection) => fetchKernFeatures(collection, bbox))
-  );
-  const features = results.flat();
+  const features = await fetchKernFeaturesInBbox(bbox, 50);
 
   if (features.length === 0) {
     // No settlement (kern) polygon anywhere near this point -> outside any bebouwde kom.
@@ -118,12 +92,42 @@ function isInNetherlands(lat, lon) {
   );
 }
 
-function checkExceptions(gemeente, plaats) {
+// Haversine distance in meters — used for small-area exceptions (see below).
+function distanceMeters(lat1, lon1, lat2, lon2) {
+  const R = 6371000;
+  const toRad = (deg) => (deg * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(a));
+}
+
+// Most exceptions.json entries match on gemeente + a substring of `plaats` (the
+// PDOK kern name) — fine for a named area that IS the kern (e.g. Haagse Bos falls
+// within Den Haag's own kern). It breaks down for small, specifically-designated
+// areas (a JOP, a parking lot, a strip of beach) that share their `plaats` with the
+// rest of a village/town: a substring match would wrongly flag the whole place. For
+// those, an entry can carry `center` {lat, lon} + `radius_m` instead of
+// `plaats_bevat`, matched by actual distance to the point being checked.
+function checkExceptions(gemeente, plaats, lat, lon) {
   if (!gemeente && !plaats) return null;
   const g = (gemeente || "").toLowerCase();
   const p = (plaats || "").toLowerCase();
   for (const area of exceptions.areas) {
-    if (area.gemeente === g && (!area.plaats_bevat || p.includes(area.plaats_bevat))) {
+    if (area.gemeente !== g) continue;
+    if (area.center && typeof area.radius_m === "number") {
+      if (
+        Number.isFinite(lat) &&
+        Number.isFinite(lon) &&
+        distanceMeters(lat, lon, area.center.lat, area.center.lon) <= area.radius_m
+      ) {
+        return area;
+      }
+      continue;
+    }
+    if (!area.plaats_bevat || p.includes(area.plaats_bevat)) {
       return area;
     }
   }
@@ -169,7 +173,7 @@ export async function GET(request) {
       reverseGeocodeGemeente(lat, lon),
     ]);
 
-    const exception = checkExceptions(gemeente, plaats);
+    const exception = checkExceptions(gemeente, plaats, lat, lon);
     if (exception) {
       return NextResponse.json({
         allowed: exception.allowed,
@@ -184,17 +188,41 @@ export async function GET(request) {
       });
     }
 
+    // Best-effort: resolve gemeente -> a direct link into its actual, currently
+    // in-force APV (deep-linked to the wildplassen article when we can find
+    // one) instead of a generic "go search for it yourself" page. Falls back
+    // gracefully (below) if the gemeente can't be resolved on CVDR.
+    const apvLink = gemeente ? await findWildplasApvLink(gemeente).catch(() => null) : null;
+
     if (insideKom) {
+      const link = apvLink
+        ? {
+            url: apvLink.url,
+            label: apvLink.article
+              ? `${apvLink.article} van de APV van ${gemeente}`
+              : `APV van ${gemeente}`,
+          }
+        : { url: POLITIE_WILDPLASSEN_URL, label: "Waarom dit verboden is (politie.nl)" };
+
       return NextResponse.json({
         allowed: false,
-        reason: `Je bevindt je binnen de bebouwde kom${plaats ? ` van ${plaats}` : ""}. De meeste gemeentelijke APV's verbieden wildplassen hier.`,
+        reason: `Je bevindt je binnen de bebouwde kom${plaats ? ` van ${plaats}` : ""}. De meeste gemeentelijke APV's verbieden wildplassen hier${apvLink?.article ? ` (${apvLink.article})` : ""}.`,
         gemeente,
         plaats,
         label,
         source: "top10nl",
-        link: { url: POLITIE_WILDPLASSEN_URL, label: "Waarom dit verboden is (politie.nl)" },
+        link,
       });
     }
+
+    const link = apvLink
+      ? {
+          url: apvLink.url,
+          label: apvLink.article
+            ? `${apvLink.article} van de APV van ${gemeente}`
+            : `APV van ${gemeente}`,
+        }
+      : { url: LOKALE_REGELGEVING_URL, label: "Zoek de APV van deze gemeente op" };
 
     return NextResponse.json({
       allowed: true,
@@ -203,7 +231,7 @@ export async function GET(request) {
       plaats,
       label,
       source: "top10nl",
-      link: { url: LOKALE_REGELGEVING_URL, label: "Zoek de APV van deze gemeente op" },
+      link,
     });
   } catch (err) {
     console.error("check_failed", err);

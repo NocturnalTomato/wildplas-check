@@ -252,7 +252,7 @@ input::placeholder {
   border-radius: 14px;
   overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.3);
-  filter: grayscale(0.6);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
 }
 
 .map-label {
@@ -272,4 +272,291 @@ input::placeholder {
   -webkit-text-stroke: 1px #000;
   paint-order: stroke fill;
   text-shadow: 0 1px 8px rgba(0, 0, 0, 0.6);
+}
+
+/* Floating "Verken de kaart" button, always reachable on the home page. */
+.map-fab {
+  position: fixed;
+  left: 50%;
+  bottom: 22px;
+  transform: translateX(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 22px;
+  border-radius: 999px;
+  background: rgba(20, 20, 20, 0.72);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  color: #fff;
+  font-weight: 700;
+  font-size: 0.95rem;
+  text-decoration: none;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.45);
+  z-index: 30;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.map-fab:hover {
+  transform: translateX(-50%) translateY(-2px);
+  box-shadow: 0 10px 34px rgba(0, 0, 0, 0.55);
+}
+
+/* --- Explore map page (/kaart) --- */
+
+.explore-wrap {
+  position: relative;
+  height: 100dvh;
+  width: 100%;
+  overflow: hidden;
+  background: #e5e3df;
+}
+
+.explore-map {
+  position: absolute;
+  inset: 0;
+}
+
+.explore-topbar {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  right: 16px;
+  z-index: 25;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.round-btn {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  background: #fff;
+  color: #1a1a1a;
+  border: none;
+  font-size: 1.2rem;
+  text-decoration: none;
+  cursor: pointer;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+}
+
+.round-btn:hover {
+  background: #f5f5f5;
+}
+
+.locate-btn {
+  position: absolute;
+  right: 16px;
+  bottom: 96px;
+  z-index: 25;
+}
+
+.explore-search {
+  flex: 1;
+}
+
+.explore-search input {
+  background: #fff;
+  color: #1a1a1a;
+  border: none;
+  border-radius: 999px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+  padding: 13px 18px;
+}
+
+.explore-search input::placeholder {
+  color: rgba(0, 0, 0, 0.45);
+}
+
+.explore-search .suggestions {
+  color: #000;
+}
+
+.explore-hint {
+  position: absolute;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 25;
+  background: rgba(20, 20, 20, 0.8);
+  color: #fff;
+  padding: 10px 18px;
+  border-radius: 999px;
+  font-size: 0.85rem;
+  backdrop-filter: blur(6px);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+  white-space: nowrap;
+}
+
+.legend {
+  position: absolute;
+  bottom: 16px;
+  left: 16px;
+  z-index: 25;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background: rgba(255, 255, 255, 0.92);
+  color: #1a1a1a;
+  padding: 10px 14px;
+  border-radius: 12px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+  font-size: 0.78rem;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex: none;
+}
+
+.dot-allowed {
+  background: #22c55e;
+}
+
+.dot-not-allowed {
+  background: #ef4444;
+}
+
+.dot-unknown {
+  background: #9ca3af;
+}
+
+.result-card {
+  position: absolute;
+  left: 16px;
+  right: 16px;
+  bottom: 16px;
+  z-index: 26;
+  max-width: 26rem;
+  margin: 0 auto;
+  background: #fff;
+  color: #1a1a1a;
+  border-radius: 16px;
+  padding: 16px 18px;
+  box-shadow: 0 10px 34px rgba(0, 0, 0, 0.35);
+  border-top: 4px solid #9ca3af;
+}
+
+.result-card.status-allowed {
+  border-top-color: #22c55e;
+}
+
+.result-card.status-not-allowed {
+  border-top-color: #ef4444;
+}
+
+.result-card.status-unknown {
+  border-top-color: #9ca3af;
+}
+
+.result-card.status-loading {
+  border-top-color: #3b82f6;
+}
+
+.result-card-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+.result-badge {
+  font-weight: 900;
+  font-size: 0.85rem;
+  padding: 4px 10px;
+  border-radius: 999px;
+  color: #fff;
+  letter-spacing: 0.02em;
+}
+
+.result-badge.status-allowed {
+  background: #22c55e;
+}
+
+.result-badge.status-not-allowed {
+  background: #ef4444;
+}
+
+.result-badge.status-unknown {
+  background: #9ca3af;
+}
+
+.result-badge.status-loading {
+  background: #3b82f6;
+}
+
+.result-label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  opacity: 0.8;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.result-reason {
+  margin: 0 0 6px 0;
+  font-size: 0.9rem;
+  line-height: 1.4;
+}
+
+.result-card .source-link {
+  color: #1a56db;
+  opacity: 1;
+  margin-bottom: 0;
+  text-shadow: none;
+  -webkit-text-stroke: 0;
+}
+
+.zone-tooltip {
+  background: rgba(20, 20, 20, 0.88) !important;
+  color: #fff !important;
+  border: none !important;
+  border-radius: 8px !important;
+  padding: 6px 10px !important;
+  font-size: 0.8rem !important;
+  font-weight: 600;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3) !important;
+}
+
+.zone-tooltip::before {
+  display: none;
+}
+
+/* Leaflet divIcon pins shared by LocationMap and ExploreMap. */
+.pin-icon {
+  background: transparent;
+  border: none;
+}
+
+.pin-wrap svg {
+  filter: drop-shadow(0 3px 6px rgba(0, 0, 0, 0.35));
+}
+
+.pin-pulse svg {
+  animation: pin-pulse 1s ease-in-out infinite;
+}
+
+@keyframes pin-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.15);
+  }
 }

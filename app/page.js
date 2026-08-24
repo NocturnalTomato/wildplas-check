@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import Image from "next/image";
+import Link from "next/link";
 import { parseCoordinates, parsePlusCode, parseGoogleMapsUrl, isUrl } from "../lib/parseLocationInput";
 
 const LocationMap = dynamic(() => import("./components/LocationMap"), { ssr: false });
@@ -306,6 +307,10 @@ export default function Home() {
           verbieden wildplassen alleen binnen de bebouwde kom — dit is een indicatie, geen juridisch advies.
         </p>
       </div>
+
+      <Link href="/kaart" className="map-fab">
+        🗺️ Verken de kaart
+      </Link>
     </main>
   );
 }
