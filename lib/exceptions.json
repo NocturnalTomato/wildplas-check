@@ -1,13 +1,4 @@
 {
-  "_comment": "Some gemeentes explicitly extend the wildplas-verbod to named areas outside the bebouwde kom (e.g. a city park or forest). Match on plaats/gemeente name (lowercase). gemeente must be the OFFICIAL PDOK Locatieserver name (e.g. \"'s-gravenhage\", not \"den haag\"; \"'s-hertogenbosch\", not \"den bosch\") since that's what /api/check's reverse-geocode lookup returns. This list is a starting point, not exhaustive — extend as you research more APVs.",
-  "areas": [
-    {
-      "gemeente": "'s-gravenhage",
-      "plaats_bevat": "haagse bos",
-      "allowed": false,
-      "note": "Het Haagse Bos ligt formeel buiten sommige bebouwde-kom-grenzen maar wordt in de Haagse APV behandeld als openbare plaats waar het verbod geldt.",
-      "apv_url": "https://lokaleregelgeving.overheid.nl/CVDR11313/14",
-      "apv_label": "Lees het verbod in de APV van Den Haag"
-    }
-  ]
+  "_comment": "Some gemeentes explicitly extend the wildplas-verbod to areas outside the bebouwde kom. gemeente must be the OFFICIAL PDOK Locatieserver name (e.g. \"'s-gravenhage\", not \"den haag\"; \"'s-hertogenbosch\", not \"den bosch\") since that's what /api/check's reverse-geocode lookup returns. Two ways to match within a gemeente: (1) `plaats_bevat` — a lowercase substring of `plaats` (the PDOK kern name), good when the named area effectively IS the kern. (2) `center` {lat, lon} + `radius_m` — a point-radius match, required when the APV designates a SMALL specific area (a JOP, a parking lot, a strip of beach) that shares its `plaats` value with the surrounding village/town; a plaats_bevat match there would wrongly flag the whole place. This list is a starting point, not exhaustive — extend as you research more APVs. NOTE (2026-08-24): the previous 's-gravenhage/Haagse Bos entry was removed — it linked to an old APV version (CVDR11313/14), and the currently in-force Den Haag APV (CVDR11313/70, checked via lokaleregelgeving.overheid.nl) no longer mentions 'Haagse Bos' or even the word 'bos' anywhere in its natuurlijke-behoefte article (artikel 4:8) or the rest of the text — that carve-out appears to have been repealed at some point between those versions. Re-add it (with a current apv_url) only if you find it's actually still in force somewhere, e.g. via a separate aanwijzingsbesluit.",
+  "areas": []
 }

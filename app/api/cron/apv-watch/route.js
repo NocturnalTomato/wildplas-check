@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { sendFindingsAlert } from "../../../../lib/notify.js";
 
 // Daily watcher: scans recently-changed gemeente APVs for wildplassen-related
 // clauses so a human can decide whether lib/exceptions.json needs an update.
@@ -77,16 +78,32 @@ function extractText(xml) {
 // needs no action. What's actually worth a human's attention is a clause that reads
 // differently — e.g. it names a specific area outside the kom (like Den Haag's
 // Haagse Bos), drops the bebouwde-kom qualifier entirely, or otherwise broadens/
-// narrows the default. We approximate that by checking whether "bebouwde kom" shows
-// up near the match: if it doesn't, the clause likely deviates from the model text.
+// narrows the default.
+//
+// Two ways a clause deviates, both checked against the FULL TEXT OF THE ARTICLE
+// the match sits in (not a flat character window around the match — an earlier
+// version used a window and it bled into unrelated neighbouring articles,
+// producing false positives from e.g. an adjacent "straatvegen" clause that
+// happens to also say "door het college aangewezen"):
+//   1. "bebouwde kom" doesn't appear in the article at all — the clause likely
+//      doesn't use the standard qualifier.
+//   2. "bebouwde kom" DOES appear, but the article ALSO extends the ban to
+//      "buiten de bebouwde kom" in a college/burgemeester-aangewezen area — the
+//      VNG model text stays silent outside the kom, so a delegated extra area
+//      is a real deviation even though "bebouwde kom" is present. This is the
+//      Bodegraven-Reeuwijk pattern (article 4:8: "verboden binnen de bebouwde
+//      kom ... alsmede buiten de bebouwde kom in een door het college
+//      aangewezen gebied") — a plain "is bebouwde kom nearby?" check misses it
+//      because the phrase IS nearby, just not exclusively.
 const BEBOUWDE_KOM_RE = /bebouwde kom/i;
-const REVIEW_WINDOW = 400;
+const OUTSIDE_KOM_DELEGATION_RE = /buiten de bebouwde kom[\s\S]{0,80}aangewezen|aangewezen[\s\S]{0,80}buiten de bebouwde kom/i;
 
 // CVDR full text renders article headers as e.g. "Artikel 4:8" (sometimes with a
-// letter suffix like "4:8a") or the older "Artikel 4.8" style. Used to tell a
-// reviewer which article a review-worthy match sits in, since the flat XML->text
-// extraction otherwise loses that structure.
-const ARTICLE_RE = /Artikel\s+\d+[:.]\d+[a-z]?/gi;
+// letter suffix like "4:8a") or the older "Artikel 4.8" style. Used both to bound
+// the article text around a match and to tell a reviewer which article a
+// review-worthy match sits in, since the flat XML->text extraction otherwise
+// loses that structure.
+const ARTICLE_RE = /Artikel\s*\d+[:.]\d+[a-z]?/gi;
 const ARTICLE_LOOKBACK = 2000;
 
 function nearestArticle(text, matchIndex) {
@@ -94,6 +111,24 @@ function nearestArticle(text, matchIndex) {
   const before = text.slice(windowStart, matchIndex);
   const found = [...before.matchAll(ARTICLE_RE)];
   return found.length > 0 ? found[found.length - 1][0] : null;
+}
+
+// Returns the [start, end) span of the article containing matchIndex — from its
+// own "Artikel X:Y" header up to (but not including) the next one, or end of
+// text if it's the last article.
+function articleBounds(text, matchIndex) {
+  const headers = [...text.matchAll(ARTICLE_RE)];
+  let start = 0;
+  let end = text.length;
+  for (let i = 0; i < headers.length; i++) {
+    if (headers[i].index <= matchIndex) {
+      start = headers[i].index;
+      end = i + 1 < headers.length ? headers[i + 1].index : text.length;
+    } else {
+      break;
+    }
+  }
+  return [start, end];
 }
 
 function findWildplasMentions(text) {
@@ -104,9 +139,11 @@ function findWildplasMentions(text) {
     const snippetStart = Math.max(0, match.index - 150);
     const snippetEnd = Math.min(text.length, match.index + match[0].length + 150);
 
-    const windowStart = Math.max(0, match.index - REVIEW_WINDOW);
-    const windowEnd = Math.min(text.length, match.index + match[0].length + REVIEW_WINDOW);
-    const matchesStandardScope = BEBOUWDE_KOM_RE.test(text.slice(windowStart, windowEnd));
+    const [articleStart, articleEnd] = articleBounds(text, match.index);
+    const articleText = text.slice(articleStart, articleEnd);
+    const hasBebouwdeKom = BEBOUWDE_KOM_RE.test(articleText);
+    const hasOutsideKomDelegation = OUTSIDE_KOM_DELEGATION_RE.test(articleText);
+    const matchesStandardScope = hasBebouwdeKom && !hasOutsideKomDelegation;
 
     hits.push({
       keyword: label,
@@ -143,26 +180,26 @@ export async function GET(request) {
     const standard = checked.filter((c) => c.hits?.length > 0 && c.hits.every((h) => !h.reviewWorthy));
     const errors = checked.filter((c) => c.error);
 
-    for (const f of findings) {
-      console.log(
-        "APV_WATCH_FINDING",
-        JSON.stringify({
-          gemeente: f.gemeente,
-          modified: f.modified,
-          apv_url: f.preferredUrl,
-          matches: f.hits,
-        })
-      );
+    const findingsPayload = findings.map((f) => ({
+      gemeente: f.gemeente,
+      modified: f.modified,
+      apv_url: f.preferredUrl,
+      matches: f.hits,
+    }));
+
+    for (const f of findingsPayload) {
+      console.log("APV_WATCH_FINDING", JSON.stringify(f));
+    }
+
+    const alert = await sendFindingsAlert(findingsPayload);
+    if (findingsPayload.length > 0 && !alert.sent) {
+      console.error("apv_watch_alert_not_sent", alert.reason);
     }
 
     return NextResponse.json({
       checkedCount: checked.length,
-      findings: findings.map((f) => ({
-        gemeente: f.gemeente,
-        modified: f.modified,
-        apv_url: f.preferredUrl,
-        matches: f.hits,
-      })),
+      findings: findingsPayload,
+      alertSent: alert.sent,
       standardScopeConfirmed: standard.map((s) => s.gemeente),
       errors: errors.map((e) => ({ gemeente: e.gemeente, error: e.error })),
     });
