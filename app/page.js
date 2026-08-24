@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import Image from "next/image";
+import { parseCoordinates, parsePlusCode, parseGoogleMapsUrl, isUrl } from "../lib/parseLocationInput";
 
 const LocationMap = dynamic(() => import("./components/LocationMap"), { ssr: false });
 
@@ -15,6 +16,14 @@ export default function Home() {
   const [suggestions, setSuggestions] = useState([]);
   const [selected, setSelected] = useState(null); // { lat, lon, label }
   const debounceRef = useRef(null);
+  const addressInputRef = useRef(null);
+  const [focusTick, setFocusTick] = useState(0);
+
+  useEffect(() => {
+    if (showAddressForm) {
+      addressInputRef.current?.focus();
+    }
+  }, [showAddressForm, focusTick]);
 
   async function runCheck(lat, lon) {
     setStatus("loading");
@@ -91,13 +100,101 @@ export default function Home() {
     runCheck(selected.lat, selected.lon);
   }
 
+  // Enter in the address bar should go straight to a result — no extra
+  // "Klopt dit?" click. Accepts a plain address, "lat, lon" pairs, a Google
+  // Plus Code, or a Google Maps URL (including shortened links).
+  async function onAddressKeyDown(e) {
+    if (e.key !== "Enter") return;
+    e.preventDefault();
+    const raw = address.trim();
+    if (!raw) return;
+
+    const coords = parseCoordinates(raw);
+    if (coords) {
+      setSuggestions([]);
+      setSelected({ lat: coords.lat, lon: coords.lon, label: raw });
+      runCheck(coords.lat, coords.lon);
+      return;
+    }
+
+    const plusCode = parsePlusCode(raw);
+    if (plusCode) {
+      setSuggestions([]);
+      setSelected({ lat: plusCode.lat, lon: plusCode.lon, label: raw });
+      runCheck(plusCode.lat, plusCode.lon);
+      return;
+    }
+
+    if (isUrl(raw)) {
+      const fromUrl = parseGoogleMapsUrl(raw);
+      if (fromUrl) {
+        setSuggestions([]);
+        setSelected({ lat: fromUrl.lat, lon: fromUrl.lon, label: raw });
+        runCheck(fromUrl.lat, fromUrl.lon);
+        return;
+      }
+      setSuggestions([]);
+      setStatus("loading");
+      setResult(null);
+      try {
+        const res = await fetch(`/api/resolve-url?q=${encodeURIComponent(raw)}`);
+        const data = await res.json();
+        if (data.error) {
+          setStatus("error");
+          return;
+        }
+        setSelected({ lat: data.lat, lon: data.lon, label: raw });
+        runCheck(data.lat, data.lon);
+      } catch {
+        setStatus("error");
+      }
+      return;
+    }
+
+    let list = suggestions;
+    if (list.length === 0) {
+      try {
+        const res = await fetch(`/api/suggest?q=${encodeURIComponent(raw)}`);
+        const data = await res.json();
+        list = data.suggestions || [];
+      } catch {
+        list = [];
+      }
+    }
+    if (list.length === 0) {
+      setStatus("error");
+      return;
+    }
+    await pickSuggestionAndCheck(list[0]);
+  }
+
+  async function pickSuggestionAndCheck(s) {
+    setSuggestions([]);
+    setAddress(s.label);
+    setStatus("loading");
+    setResult(null);
+    try {
+      const res = await fetch(`/api/lookup?id=${encodeURIComponent(s.id)}`);
+      const data = await res.json();
+      if (data.error) {
+        setStatus("error");
+        return;
+      }
+      setSelected({ lat: data.lat, lon: data.lon, label: data.label });
+      runCheck(data.lat, data.lon);
+    } catch {
+      setStatus("error");
+    }
+  }
+
   function reset() {
     setStatus("idle");
     setResult(null);
     setSelected(null);
     setAddress("");
     setSuggestions([]);
-    setShowAddressForm(false);
+    setShowAddressForm(true);
+    setFocusTick((t) => t + 1);
   }
 
   useEffect(() => {
@@ -173,10 +270,12 @@ export default function Home() {
           <div className="address-panel">
             <div className="autocomplete">
               <input
+                ref={addressInputRef}
                 type="text"
-                placeholder="Straat, plaats…"
+                placeholder="Straat, plaats, coördinaten of Google-maps link…"
                 value={address}
                 onChange={onAddressChange}
+                onKeyDown={onAddressKeyDown}
                 autoComplete="off"
               />
               {suggestions.length > 0 && (
