@@ -1,0 +1,38 @@
+name: Refresh nationwide zones cache
+
+# Rebuilds lib/data/zones-nl.json from PDOK once a week and commits it if
+# anything changed. /api/zones serves straight from this file (see its own
+# comment) so map-shading requests never hit PDOK live — this workflow is
+# what keeps that cache from going stale. Pushing to main triggers Vercel's
+# normal git-linked deploy, so the refreshed data goes live automatically.
+on:
+  schedule:
+    - cron: "0 3 * * 1" # every Monday 03:00 UTC
+  workflow_dispatch: {} # allows a manual run from the Actions tab
+
+permissions:
+  contents: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - run: npm run build-zones-cache
+
+      - name: Commit updated cache if changed
+        run: |
+          if git diff --quiet -- lib/data/zones-nl.json; then
+            echo "No changes to zones-nl.json — skipping commit."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add lib/data/zones-nl.json
+          git commit -m "Weekly refresh of nationwide zones cache"
+          git push

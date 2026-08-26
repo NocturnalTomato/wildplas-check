@@ -12,17 +12,8 @@ const STATUS_LABEL = {
   loading: "…",
 };
 
-// Below this zoom, a viewport bbox covers too much ground for a meaningful
-// (and PDOK-friendly) zone fetch — same idea as Google Maps only rendering
-// detailed layers once you're zoomed in on a city/town scale.
-const ZONE_MIN_ZOOM = 13;
 const ZONE_DEBOUNCE_MS = 400;
 const ZONE_PAD_FACTOR = 0.15;
-// Must stay comfortably under /api/zones' MAX_SPAN_DEG (0.35) — that cap is a
-// server-side safety net, this is what actually keeps requests under it. A
-// padded viewport at ZONE_MIN_ZOOM on a wide monitor can otherwise exceed the
-// server cap, which used to get silently swallowed (see clamp below).
-const MAX_BBOX_SPAN_DEG = 0.32;
 
 function statusFromResult(data) {
   if (!data) return "unknown";
@@ -44,20 +35,16 @@ function padBounds(bounds, factor) {
   return { west: west - padLon, east: east + padLon, south: south - padLat, north: north + padLat };
 }
 
-// Shrinks a [min, max] span down to maxSpan around its own center, if needed.
-// Used so a wide monitor's padded viewport can never produce a bbox the
-// server rejects — it just fetches a slightly smaller area instead of
-// failing outright.
-function clampSpan(min, max, maxSpan) {
-  if (max - min <= maxSpan) return [min, max];
-  const center = (min + max) / 2;
-  return [center - maxSpan / 2, center + maxSpan / 2];
-}
-
-function clampBounds(padded, maxSpan) {
-  const [west, east] = clampSpan(padded.west, padded.east, maxSpan);
-  const [south, north] = clampSpan(padded.south, padded.north, maxSpan);
-  return { west, east, south, north };
+// extraRestriction = outside the kom, but this gemeente's APV bans
+// wildplassen there anyway (no "binnen de bebouwde kom" qualifier) — a
+// distinct solid color so it doesn't get confused with plain red/green.
+function zoneStyle({ inKom, extraRestriction }) {
+  if (extraRestriction) {
+    return { fillColor: "#7c3aed", fillOpacity: 0.45, color: "#5b21b6", weight: 1.5 };
+  }
+  return inKom
+    ? { fillColor: "#ef4444", fillOpacity: 0.4, color: "#b91c1c", weight: 1.5 }
+    : { fillColor: "#22c55e", fillOpacity: 0.28, color: "#15803d", weight: 1.5 };
 }
 
 export default function ExploreMap() {
@@ -66,6 +53,8 @@ export default function ExploreMap() {
   const LRef = useRef(null);
   const markerRef = useRef(null);
   const zonesGroupRef = useRef(null);
+  const washRef = useRef(null);
+  const zoneCanvasRendererRef = useRef(null);
   const zoneFetchAbortRef = useRef(null);
   const zoneDebounceRef = useRef(null);
 
@@ -73,7 +62,6 @@ export default function ExploreMap() {
   const [query, setQuery] = useState("");
   const [suggestions, setSuggestions] = useState([]);
   const [locating, setLocating] = useState(false);
-  const [zonesHint, setZonesHint] = useState("zoom-in"); // "zoom-in" | "ready" | null
   const debounceRef = useRef(null);
 
   async function checkPoint(lat, lon, label) {
@@ -107,28 +95,38 @@ export default function ExploreMap() {
     }
   }
 
+  // Keeps the green "allowed" wash glued to the current viewport at all
+  // times — cheap (just resizing one rectangle, no network), so it runs on
+  // every pan/zoom tick rather than being debounced like the precise zone
+  // fetch below. This is what makes the overlay read as present everywhere,
+  // instantly, regardless of zoom level or whether the zone fetch succeeds.
+  function updateWash() {
+    const map = mapRef.current;
+    if (!map || !washRef.current) return;
+    const padded = padBounds(map.getBounds(), ZONE_PAD_FACTOR);
+    washRef.current.setBounds([
+      [padded.south, padded.west],
+      [padded.north, padded.east],
+    ]);
+  }
+
   async function refreshZones() {
     const L = LRef.current;
     const map = mapRef.current;
     if (!L || !map) return;
 
-    const zoom = map.getZoom();
-    if (zoom < ZONE_MIN_ZOOM) {
-      if (zonesGroupRef.current) {
-        map.removeLayer(zonesGroupRef.current);
-        zonesGroupRef.current = null;
-      }
-      setZonesHint("zoom-in");
-      return;
-    }
-    setZonesHint("ready");
+    updateWash();
 
     if (zoneFetchAbortRef.current) zoneFetchAbortRef.current.abort();
     const controller = new AbortController();
     zoneFetchAbortRef.current = controller;
 
-    const padded = clampBounds(padBounds(map.getBounds(), ZONE_PAD_FACTOR), MAX_BBOX_SPAN_DEG);
-    const bbox = [padded.west, padded.south, padded.east, padded.north].join(",");
+    // /api/zones now serves from an in-memory nationwide cache (see its own
+    // comment) — filtering it by bbox is essentially free server-side, so
+    // this fetches the same (padded) bounds as the wash: real red/green/
+    // purple shading everywhere in view, at any zoom, not just near center.
+    const fetchBounds = padBounds(map.getBounds(), ZONE_PAD_FACTOR);
+    const bbox = [fetchBounds.west, fetchBounds.south, fetchBounds.east, fetchBounds.north].join(",");
 
     let data;
     try {
@@ -147,44 +145,35 @@ export default function ExploreMap() {
     // could orphan an open hover tooltip on a layer that no longer existed.
     const nextGroup = L.layerGroup();
 
-    // Green "allowed" wash under everything — kom polygons drawn on top
-    // visually punch red through it, so unmarked ground (open countryside,
-    // small settlements PDOK doesn't flag) still reads as "mag wel".
-    L.rectangle(
-      [
-        [padded.south, padded.west],
-        [padded.north, padded.east],
-      ],
-      { fillColor: "#22c55e", fillOpacity: 0.16, color: "#22c55e", weight: 0, interactive: false }
-    ).addTo(nextGroup);
+    function bindZoneInteractions(feature, layer) {
+      const { inKom, extraRestriction, plaats, gemeente } = feature.properties || {};
+      const tooltipText = extraRestriction
+        ? `🟣 Buiten bebouwde kom${plaats ? ` (${plaats})` : ""} — APV van ${gemeente} verbiedt wildplassen hier toch`
+        : inKom
+        ? `🔴 Bebouwde kom${plaats ? ` van ${plaats}` : ""} — wildplassen niet toegestaan`
+        : `🟢 Buiten bebouwde kom${plaats ? ` (${plaats})` : ""} — wildplassen toegestaan`;
+      layer.bindTooltip(tooltipText, { sticky: true, className: "zone-tooltip" });
 
+      const baseStyle = zoneStyle(feature.properties || {});
+      const hoverStyle = { ...baseStyle, weight: 3, fillOpacity: baseStyle.fillOpacity + 0.15 };
+
+      layer.on("mouseover", () => layer.setStyle(hoverStyle));
+      layer.on("mouseout", () => layer.setStyle(baseStyle));
+      layer.on("click", (e) => {
+        L.DomEvent.stop(e);
+        setSuggestions([]);
+        checkPoint(e.latlng.lat, e.latlng.lng, plaats || null);
+      });
+    }
+
+    // A whole-country view can put thousands of kom polygons on screen at
+    // once — Leaflet's default SVG renderer bogs down at that count, so this
+    // uses a shared Canvas renderer instead (reused across refreshes rather
+    // than recreated, per Leaflet's own guidance).
     L.geoJSON(data, {
-      style: (feature) => {
-        const inKom = feature.properties?.inKom;
-        return inKom
-          ? { fillColor: "#ef4444", fillOpacity: 0.4, color: "#b91c1c", weight: 1.5 }
-          : { fillColor: "#22c55e", fillOpacity: 0.28, color: "#15803d", weight: 1.5 };
-      },
-      onEachFeature: (feature, layer) => {
-        const { inKom, plaats } = feature.properties || {};
-        const tooltipText = inKom
-          ? `🔴 Bebouwde kom${plaats ? ` van ${plaats}` : ""} — wildplassen niet toegestaan`
-          : `🟢 Buiten bebouwde kom${plaats ? ` (${plaats})` : ""} — wildplassen toegestaan`;
-        layer.bindTooltip(tooltipText, { sticky: true, className: "zone-tooltip" });
-
-        const baseStyle = inKom
-          ? { fillColor: "#ef4444", fillOpacity: 0.4, color: "#b91c1c", weight: 1.5 }
-          : { fillColor: "#22c55e", fillOpacity: 0.28, color: "#15803d", weight: 1.5 };
-        const hoverStyle = { ...baseStyle, weight: 3, fillOpacity: baseStyle.fillOpacity + 0.15 };
-
-        layer.on("mouseover", () => layer.setStyle(hoverStyle));
-        layer.on("mouseout", () => layer.setStyle(baseStyle));
-        layer.on("click", (e) => {
-          L.DomEvent.stop(e);
-          setSuggestions([]);
-          checkPoint(e.latlng.lat, e.latlng.lng, plaats || null);
-        });
-      },
+      renderer: zoneCanvasRendererRef.current,
+      style: (feature) => zoneStyle(feature.properties || {}),
+      onEachFeature: bindZoneInteractions,
     }).addTo(nextGroup);
 
     if (controller.signal.aborted) return; // superseded while we were building the layer group
@@ -214,6 +203,8 @@ export default function ExploreMap() {
         center: [52.1, 5.3],
         zoom: 8,
       });
+      mapRef.current = map;
+      zoneCanvasRendererRef.current = L.canvas({ padding: 0.5 });
       L.control.zoom({ position: "bottomright" }).addTo(map);
 
       L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", {
@@ -223,13 +214,25 @@ export default function ExploreMap() {
           '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>-bijdragers &copy; <a href="https://carto.com/attributions">CARTO</a>',
       }).addTo(map);
 
+      // Green "allowed" wash under everything — a single rectangle whose
+      // bounds we just resize on every viewport change (see updateWash),
+      // rather than a layer we tear down and rebuild, so it never flickers
+      // and is always present regardless of zoom or network state.
+      washRef.current = L.rectangle(map.getBounds(), {
+        fillColor: "#22c55e",
+        fillOpacity: 0.16,
+        color: "#22c55e",
+        weight: 0,
+        interactive: false,
+      }).addTo(map);
+
       map.on("click", (e) => {
         setSuggestions([]);
         checkPoint(e.latlng.lat, e.latlng.lng, null);
       });
+      map.on("move zoom", updateWash);
       map.on("moveend zoomend", scheduleZoneRefresh);
 
-      mapRef.current = map;
       refreshZones();
     })();
 
@@ -351,12 +354,12 @@ export default function ExploreMap() {
         <span className="legend-item">
           <span className="dot dot-unknown" /> geen idee
         </span>
+        <span className="legend-item">
+          <span className="dot dot-extra" /> ook buiten kom verboden
+        </span>
       </div>
 
-      {!card && zonesHint === "zoom-in" && (
-        <div className="explore-hint">Zoom in om de wildplas-zones te zien</div>
-      )}
-      {!card && zonesHint === "ready" && (
+      {!card && (
         <div className="explore-hint">Tik op een zone voor de reden, of ergens anders op de kaart</div>
       )}
 

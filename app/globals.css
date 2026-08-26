@@ -416,6 +416,17 @@ input::placeholder {
   gap: 8px;
 }
 
+/* Below this width the result card (bottom-right, capped at 100% - 32px)
+   gets wide enough to reach the bottom-left corner, so the legend moves up
+   under the topbar instead — it must stay visible no matter what's open. */
+@media (max-width: 640px) {
+  .legend {
+    top: 74px;
+    bottom: auto;
+    left: 16px;
+  }
+}
+
 .dot {
   width: 10px;
   height: 10px;
@@ -435,14 +446,16 @@ input::placeholder {
   background: #9ca3af;
 }
 
+.dot-extra {
+  background: #7c3aed;
+}
+
 .result-card {
   position: absolute;
-  left: 16px;
   right: 16px;
   bottom: 16px;
   z-index: 26;
-  max-width: 26rem;
-  margin: 0 auto;
+  width: min(26rem, calc(100% - 32px));
   background: #fff;
   color: #1a1a1a;
   border-radius: 16px;

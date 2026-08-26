@@ -1,11 +1,10 @@
 import { NextResponse } from "next/server";
 import exceptions from "../../../lib/exceptions.json";
-import { fetchKernFeaturesInBbox, firstProp, isTruthyFlag } from "../../../lib/top10nl.js";
+import { fetchKernFeaturesInBbox, firstProp, isTruthyFlag, reverseGeocodeGemeente } from "../../../lib/top10nl.js";
 import { findWildplasApvLink } from "../../../lib/apvLookup.js";
 
 // PDOK Locatieserver — free-text geocoding, no API key required.
 const LOCATIESERVER_URL = "https://api.pdok.nl/bzk/locatieserver/search/v3_1/free";
-const LOCATIESERVER_REVERSE_URL = "https://api.pdok.nl/bzk/locatieserver/search/v3_1/reverse";
 
 // PDOK BRT TOP10NL — modern OGC API Features (replaces the old WFS service, which
 // no longer resolves reliably). The bebouwde-kom flag lives on settlement-level
@@ -43,16 +42,6 @@ async function geocode(address) {
     lat: parseFloat(match[2]),
     label: doc.weergavenaam,
   };
-}
-
-// Neither plaats_vlak nor plaats_multivlak carries the gemeente name, so we
-// resolve it separately via reverse geocoding.
-async function reverseGeocodeGemeente(lat, lon) {
-  const url = `${LOCATIESERVER_REVERSE_URL}?lat=${lat}&lon=${lon}&rows=1&fl=gemeentenaam`;
-  const res = await fetch(url);
-  if (!res.ok) return null;
-  const data = await res.json();
-  return data?.response?.docs?.[0]?.gemeentenaam || null;
 }
 
 async function lookupBebouwdeKom(lat, lon) {
